@@ -78,3 +78,148 @@ body {
   border-left: 4px solid #007acc;
   color: #000;
 }
+
+/* Hide element */
+.hidden {
+  display: none !important;
+}
+
+/* Configuration Panel Overlay */
+#config-panel {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+/* Configuration Panel Content */
+.config-content {
+  background: #1e1e1e;
+  padding: 30px 40px;
+  border-radius: 8px;
+  box-shadow: 0 8px 16px rgba(0,0,0,0.6);
+  width: 400px;
+  max-width: 90%;
+  color: #e0e0e0;
+  position: relative;
+}
+
+/* Close button positioned in the top-right corner */
+#close-config-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: transparent;
+  border: none;
+  color: #ff6666;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+/* Header for configuration panel */
+.config-content h2 {
+  margin-top: 0;
+  text-align: center;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 24px;
+  margin-bottom: 20px;
+}
+
+/* Form Group Styling */
+.form-group {
+  margin-bottom: 15px;
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group label {
+  margin-bottom: 5px;
+  font-size: 14px;
+}
+
+.form-group input[type="number"],
+.form-group select {
+  padding: 8px 10px;
+  font-size: 16px;
+  border: 1px solid #333;
+  border-radius: 4px;
+  background: #2a2a2a;
+  color: #e0e0e0;
+}
+
+/* Exclude Control (dropdown and Add button) */
+.exclude-control {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+/* Pills Container */
+#excluded-country-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.excluded-pill {
+  background: #333;
+  padding: 5px 10px;
+  border-radius: 20px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.excluded-pill .remove-pill-btn {
+  background: transparent;
+  border: none;
+  color: #ff6666;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+/* Save Button Styling */
+#save-config-btn {
+  margin: 20px auto 0;
+  display: block;
+}
+
+/* API Key Modal */
+#api-key-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3000;
+}
+
+#api-key-modal .modal-content {
+  background: #1e1e1e;
+  padding: 20px 30px;
+  border-radius: 8px;
+  text-align: center;
+}
+
+#api-key-modal input {
+  padding: 8px;
+  margin-top: 10px;
+  width: 80%;
+  font-size: 16px;
+  border: 1px solid #333;
+  border-radius: 4px;
+  background: #2a2a2a;
+  color: #e0e0e0;
+}

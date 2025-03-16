@@ -6,11 +6,19 @@
     <link rel="stylesheet" href="css/main.css" />
   </head>
   <body id="chats-output">
+    <!-- API Key Modal (hidden by default) -->
+    <div id="api-key-modal" class="hidden">
+      <div class="modal-content">
+        <h2>Enter your ChatGPT API Key</h2>
+        <input type="password" id="api-key-input" placeholder="API Key" />
+        <button id="save-api-key-btn" class="header-btn">Save API Key</button>
+      </div>
+    </div>
+
     <!-- Fixed header with configuration menu and stats -->
     <div class="hud-header">
       <div class="menu">
         <button class="header-btn" id="config-btn">Config</button>
-        <!-- Add more menu items as needed -->
       </div>
       <div class="stats">
         <span id="token-count">Tokens Used: 0</span>
@@ -20,7 +28,43 @@
 
     <!-- Chat messages container -->
     <div id="chat-messages">
-      <!-- More messages appended dynamically -->
+      <!-- Messages will be appended dynamically -->
+    </div>
+
+    <!-- Configuration Panel -->
+    <div id="config-panel" class="hidden">
+      <div class="config-content">
+        <button class="header-btn" id="close-config-btn">×</button>
+        <h2>Configuration</h2>
+        <form id="config-form">
+          <div class="form-group">
+            <label for="message-timeout">Message timeout seconds:</label>
+            <input type="number" id="message-timeout" name="message-timeout" step="any" />
+          </div>
+          <div class="form-group">
+            <label for="message-limit">Message limit:</label>
+            <input type="number" id="message-limit" name="message-limit" step="any" />
+          </div>
+          <div class="form-group">
+            <label for="cost-per-token-input">Cost per Token:</label>
+            <input type="number" id="cost-per-token-input" name="cost-per-token-input" step="any" />
+          </div>
+          <div class="form-group">
+            <label for="excluded-country-codes-input">Exclude Countries:</label>
+            <div class="exclude-control">
+              <!-- Dropdown for selecting a country to exclude -->
+              <select id="excluded-country-codes-input" name="excluded-country-codes-input">
+                <!-- Options will be populated by JavaScript -->
+              </select>
+              <button type="button" class="header-btn" id="add-excluded-btn">Add</button>
+            </div>
+          </div>
+          <div id="excluded-country-pills">
+            <!-- Pills will appear here -->
+          </div>
+          <button class="header-btn" id="save-config-btn">Save</button>
+        </form>
+      </div>
     </div>
 
     <script type="module" src="src/main.mjs"></script>
