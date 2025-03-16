@@ -9,7 +9,10 @@
     <!-- API Key Modal (hidden by default) -->
     <div id="api-key-modal" class="hidden">
       <div class="modal-content">
-        <h2>Enter your ChatGPT API Key</h2>
+        <h2>
+          Enter your ChatGPT API Key
+          <span class="tooltip" data-tooltip="Stores your ChatGPT for the duration of the window session only.">?</span>
+        </h2>
         <input type="password" id="api-key-input" placeholder="API Key" />
         <button id="save-api-key-btn" class="header-btn">Save API Key</button>
       </div>
@@ -81,5 +84,7 @@
     </div>
 
     <script type="module" src="src/main.mjs"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700&display=swap" rel="stylesheet">
+
   </body>
 </html>

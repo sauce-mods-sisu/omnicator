@@ -10,10 +10,13 @@ body {
   margin: 0;
   font-family: 'Orbitron', Arial, sans-serif;
   background-color: rgba(18, 18, 18, 0.8);
+  border-radius: 8px;
 }
 
 /* Container for the header and chat messages */
 #chats-output {
+  border-radius: 8px;
+  overflow: hidden;
   position: relative;
 }
 
@@ -55,6 +58,7 @@ body {
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
+  margin-top: 4px;
 }
 
 .header-btn:hover {
@@ -253,26 +257,25 @@ body {
 
 /* Ensure the message container items are displayed inline */
 .message {
+  display: flex;
+  align-items: center; /* vertically centers children */
+  justify-content: flex-start; /* left-aligns content */
   background-color: #1e1e1e;
   padding: 12px;
   margin-bottom: 10px;
   border-radius: 5px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   font-size: 16px;
   word-wrap: break-word;
-  /* Optionally, use flex if you want more control */
-  /* display: flex;
-     align-items: center; */
 }
 
-/* Header container for flag and name set as inline-flex */
 .message-header {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   margin-right: 8px;
+  white-space: nowrap;
 }
 
-/* Flag styling */
 .message-flag {
   width: 24px;
   height: 24px;
@@ -280,19 +283,23 @@ body {
   object-fit: contain;
 }
 
-/* Make the name pop */
 .message-name {
   font-weight: bold;
   color: #00ff00;
-  font-size: 16px;
+  font-size: 24px;
   margin-right: 8px;
+  white-space: nowrap;
 }
 
-/* Message text styling */
 .message-text {
-  font-weight: 400; /* You can adjust this value or set it via JS */
   flex: 1;
+  text-align: left;
+  vertical-align: middle;
+  font-size: 20px;
+  font-weight: bold;
+  font-family: 'Montserrat', sans-serif;
 }
+
 .tooltip {
   position: relative;
   display: inline-block;
