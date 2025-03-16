@@ -5,10 +5,11 @@ html, body {
 }
 
 body {
-  background-color: #121212;
+  /* background-color: #121212; */
   color: #e0e0e0;
   margin: 0;
   font-family: 'Orbitron', Arial, sans-serif;
+  background-color: rgba(18, 18, 18, 0.8);
 }
 
 /* Container for the header and chat messages */
@@ -96,7 +97,7 @@ body {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.75);
+  background-color: rgba(18, 18, 18, 0.8);
   display: flex;
   align-items: center;
   justify-content: center;

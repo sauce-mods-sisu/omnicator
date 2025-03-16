@@ -123,13 +123,6 @@ document.addEventListener('mouseup', () => {
   isDragging = false;
 });
 
-/** Renderer instance **/
-const renderer = new common.Renderer(chatWindow, { fps: 2 });
-renderer.addCallback(chatData => {
-  console.log(JSON.stringify(chatData));
-  if (!chatData) return;
-});
-
 // Header elements for token count and cost.
 const tokenCountEl = document.getElementById('token-count');
 const estimatedCostEl = document.getElementById('estimated-cost');
