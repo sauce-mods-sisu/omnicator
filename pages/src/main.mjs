@@ -143,35 +143,63 @@ function updateCostDisplay() {
 function addMessageToChats(message, countryCode) {
   const messageDiv = document.createElement('div');
   messageDiv.className = "message";
-  
+
+  // Create a container for the header (flag and name)
+  const headerDiv = document.createElement('div');
+  headerDiv.className = "message-header";
+
   // Convert countryCode (number) to a string with leading zeros (3 digits)
   const codeStr = String(countryCode).padStart(3, '0');
-  
+
+  // Add flag image if available
   if (codeStr in flagIcons) {
     const flagImg = document.createElement('img');
     flagImg.src = flagIcons[codeStr].url;
     flagImg.alt = "Flag";
-    flagImg.style.width = '24px';
-    flagImg.style.height = '24px';
-    flagImg.style.marginRight = '8px';
-    messageDiv.appendChild(flagImg);
+    flagImg.className = "message-flag"; // For CSS styling
+    headerDiv.appendChild(flagImg);
   }
-  
-  const messageText = document.createElement('span');
-  messageText.textContent = message;
-  messageDiv.appendChild(messageText);
-  
+
+  // Assume the message is formatted as "Name : Actual message".
+  // If no colon is found, the entire message is treated as the actual message.
+  let nameText = "";
+  let actualMessage = "";
+  const colonIndex = message.indexOf(":");
+  if (colonIndex !== -1) {
+    nameText = message.slice(0, colonIndex).trim();
+    actualMessage = message.slice(colonIndex + 1).trim();
+  } else {
+    actualMessage = message;
+  }
+
+  // Create a span for the name that "pops"
+  const nameSpan = document.createElement('span');
+  nameSpan.className = "message-name"; // Style this class in CSS to be bold and larger
+  nameSpan.textContent = nameText;
+  headerDiv.appendChild(nameSpan);
+
+  // Append header container only if there is a name.
+  if (nameText) {
+    messageDiv.appendChild(headerDiv);
+  }
+
+  // Create a span for the actual message text.
+  const textSpan = document.createElement('span');
+  textSpan.className = "message-text";
+  textSpan.textContent = actualMessage;
+  messageDiv.appendChild(textSpan);
+
   const chatMessages = document.getElementById('chat-messages');
   chatMessages.appendChild(messageDiv);
-  
-  // Use the configured messageTimeout (in seconds) converted to milliseconds.
+
+  // Remove this message after the configured timeout (in seconds).
   setTimeout(() => {
     if (messageDiv.parentElement === chatMessages) {
       chatMessages.removeChild(messageDiv);
     }
   }, messageTimeout * 1000);
-  
-  // Enforce the configured messageLimit.
+
+  // Enforce the configured message limit.
   while (chatMessages.childNodes.length > messageLimit) {
     chatMessages.removeChild(chatMessages.firstChild);
   }

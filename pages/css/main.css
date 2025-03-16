@@ -1,4 +1,9 @@
 /* Global Styles */
+
+html, body {
+  overflow-x: hidden;
+}
+
 body {
   background-color: #121212;
   color: #e0e0e0;
@@ -153,6 +158,27 @@ body {
   color: #e0e0e0;
 }
 
+/* New container to display certain form groups inline */
+.form-inline-group {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end; /* Align inputs on the bottom */
+  margin-bottom: 15px;
+}
+
+.form-inline-group .form-group input {
+  width: 110px;          /* Adjust as needed */
+  font-size: 14px;      /* Slightly smaller font */
+  padding: 4px 6px;     /* Less padding */
+  box-sizing: border-box;
+}
+
+/* Optionally, adjust individual form-group widths for a balanced look */
+.form-inline-group .form-group {
+  flex: 1;
+}
+
+
 /* Exclude Control (dropdown and Add button) */
 .exclude-control {
   display: flex;
@@ -222,4 +248,102 @@ body {
   border-radius: 4px;
   background: #2a2a2a;
   color: #e0e0e0;
+}
+
+/* Ensure the message container items are displayed inline */
+.message {
+  background-color: #1e1e1e;
+  padding: 12px;
+  margin-bottom: 10px;
+  border-radius: 5px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  font-size: 16px;
+  word-wrap: break-word;
+  /* Optionally, use flex if you want more control */
+  /* display: flex;
+     align-items: center; */
+}
+
+/* Header container for flag and name set as inline-flex */
+.message-header {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 8px;
+}
+
+/* Flag styling */
+.message-flag {
+  width: 24px;
+  height: 24px;
+  margin-right: 8px;
+  object-fit: contain;
+}
+
+/* Make the name pop */
+.message-name {
+  font-weight: bold;
+  color: #00ff00;
+  font-size: 16px;
+  margin-right: 8px;
+}
+
+/* Message text styling */
+.message-text {
+  font-weight: 400; /* You can adjust this value or set it via JS */
+  flex: 1;
+}
+.tooltip {
+  position: relative;
+  display: inline-block;
+  cursor: help;
+  color: #00ff00;
+  background: #1e1e1e;
+  border: 1px solid #00ff00;
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  line-height: 16px;
+  font-size: 12px;
+  text-align: center;
+  margin-left: 5px;
+}
+
+/* Tooltip popup text */
+.tooltip::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 125%; /* Position above the icon */
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #333;
+  color: #fff;
+  padding: 5px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+
+/* Arrow for tooltip */
+.tooltip::before {
+  content: "";
+  position: absolute;
+  bottom: 115%; /* Slightly above the icon */
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 5px;
+  border-style: solid;
+  border-color: #333 transparent transparent transparent;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+
+.tooltip:hover::after,
+.tooltip:hover::before {
+  opacity: 1;
+  visibility: visible;
 }
