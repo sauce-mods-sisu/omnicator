@@ -133,70 +133,61 @@ function updateCostDisplay() {
 }
 
 /** Append a new message to the chat messages container **/
-function addMessageToChats(message, countryCode) {
+function addMessageToChats(firstName, lastName, message, countryCode) {
   const messageDiv = document.createElement('div');
   messageDiv.className = "message";
-
-  // Create a container for the header (flag and name)
-  const headerDiv = document.createElement('div');
-  headerDiv.className = "message-header";
-
+  
   // Convert countryCode (number) to a string with leading zeros (3 digits)
   const codeStr = String(countryCode).padStart(3, '0');
+  
+  const chatContainerSpan = document.createElement('span');
 
-  // Add flag image if available
+  // Create a span for the message name.
+  const messageName = document.createElement('span');
+  messageName.className = "message-name";
+  messageName.textContent = `${firstName} ${lastName}`;
+
+  // Create a text node for the colon separator.
+  const colonText = document.createTextNode(': ');
+
+  // Create a span for the message text.
+  const messageText = document.createElement('span');
+  messageText.className = "message-text";
+  messageText.textContent = message;
+
   if (codeStr in flagIcons) {
     const flagImg = document.createElement('img');
     flagImg.src = flagIcons[codeStr].url;
     flagImg.alt = "Flag";
-    flagImg.className = "message-flag"; // For CSS styling
-    headerDiv.appendChild(flagImg);
+    flagImg.className = "message-flag"; // Use CSS to control size.
+    chatContainerSpan.appendChild(flagImg);
   }
+  
+  // Append elements in the desired order.
+  chatContainerSpan.appendChild(messageName);
+  chatContainerSpan.appendChild(colonText);
+  chatContainerSpan.appendChild(messageText);
 
-  // Assume the message is formatted as "Name : Actual message".
-  // If no colon is found, the entire message is treated as the actual message.
-  let nameText = "";
-  let actualMessage = "";
-  const colonIndex = message.indexOf(":");
-  if (colonIndex !== -1) {
-    nameText = message.slice(0, colonIndex).trim();
-    actualMessage = message.slice(colonIndex + 1).trim();
-  } else {
-    actualMessage = message;
-  }
-
-  // Create a span for the name that "pops"
-  const nameSpan = document.createElement('span');
-  nameSpan.className = "message-name"; // Style this class in CSS to be bold and larger
-  nameSpan.textContent = nameText;
-  headerDiv.appendChild(nameSpan);
-
-  // Append header container only if there is a name.
-  if (nameText) {
-    messageDiv.appendChild(headerDiv);
-  }
-
-  // Create a span for the actual message text.
-  const textSpan = document.createElement('span');
-  textSpan.className = "message-text";
-  textSpan.textContent = actualMessage;
-  messageDiv.appendChild(textSpan);
-
+  messageDiv.appendChild(chatContainerSpan);
+  
   const chatMessages = document.getElementById('chat-messages');
-  chatMessages.appendChild(messageDiv);
-
-  // Remove this message after the configured timeout (in seconds).
+  
+  // Insert new messages at the top.
+  chatMessages.insertBefore(messageDiv, chatMessages.firstChild);
+  
   setTimeout(() => {
     if (messageDiv.parentElement === chatMessages) {
       chatMessages.removeChild(messageDiv);
     }
   }, messageTimeout * 1000);
-
+  
   // Enforce the configured message limit.
   while (chatMessages.childNodes.length > messageLimit) {
-    chatMessages.removeChild(chatMessages.firstChild);
+    chatMessages.removeChild(chatMessages.lastChild);
   }
 }
+
+
 
 /* ===============================
    ChatGPT Completions & Translation
@@ -210,7 +201,7 @@ function translate(message, firstName, lastName, countryCode) {
   
   if (excludedCountryCodes.has(codeStr)) {
     console.log(`Not translating message from ${codeStr}`);
-    addMessageToChats(`${firstName} ${lastName} : ${message}`, codeStr);
+    addMessageToChats(firstName, lastName, message, codeStr);
     return;
   }
   
@@ -237,8 +228,7 @@ function translate(message, firstName, lastName, countryCode) {
       console.log("ChatGPT response:", data);
       const translatedMessage = data.choices[0]?.message?.content;
       if (translatedMessage) {
-        const fullMessage = `${firstName} ${lastName} : ${translatedMessage}`;
-        addMessageToChats(fullMessage, codeStr);
+        addMessageToChats(firstName, lastName, translatedMessage, codeStr);
       } else {
         console.error("No translated message received", data);
       }
@@ -311,10 +301,7 @@ async function main() {
   common.subscribe('chat', async messageData => {
     const { firstName, lastName, countryCode, message } = messageData;
     translate(message, firstName, lastName, countryCode);
-    renderer.render();
   });
-  addEventListener('resize', () => renderer.render({ force: true }));
-  renderer.render();
 }
 
 /* ===============================

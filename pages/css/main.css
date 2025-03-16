@@ -261,19 +261,19 @@ body {
   align-items: center; /* vertically centers children */
   justify-content: flex-start; /* left-aligns content */
   background-color: #1e1e1e;
-  padding: 12px;
+  padding: 12px 12px 12px 20px; /* Left padding increased to 20px */
   margin-bottom: 10px;
   border-radius: 5px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  font-size: 16px;
   word-wrap: break-word;
 }
 
 .message-header {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  margin-right: 8px;
   white-space: nowrap;
+  margin-right: 8px;
+  margin-left: 10px; /* Adds space on the left */
 }
 
 .message-flag {
@@ -286,7 +286,7 @@ body {
 .message-name {
   font-weight: bold;
   color: #00ff00;
-  font-size: 24px;
+  font-size: 22px;
   margin-right: 8px;
   white-space: nowrap;
 }
@@ -295,7 +295,7 @@ body {
   flex: 1;
   text-align: left;
   vertical-align: middle;
-  font-size: 20px;
+  font-size: 18px;
   font-weight: bold;
   font-family: 'Montserrat', sans-serif;
 }
