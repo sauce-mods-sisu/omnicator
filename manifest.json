@@ -1,0 +1,28 @@
+{
+    "manifest_version": 1,
+    "name"            : "Omnicator",
+    "description"     : "Translate all chat messages using ChatGPT",
+    "author"          : "Ryan McCormick",
+    "website_url"     : "",
+    "version"         : "0.0.1",
+    "content_js": [
+    ],
+    "content_css": [
+    ],
+    "web_root"        : "pages",
+    "windows"         : [{
+        "file"          : "pages/main.html",
+        "id"            : "zwift-omnicator",
+        "name"          : "Omnicator",
+        "description"   : "Translate all Zwift Chat",
+        "always_visible": true,
+        "overlay"       : true,
+        "frame"         : false,
+        "default_bounds": {
+            "width" : 600,
+            "height": 200,
+            "x"     : 100,
+            "y"     : -100
+        }
+    }]
+}

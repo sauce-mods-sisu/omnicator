@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html id="omnicator" tabindex="0" data-settings-key="translingua-zwift">
+  <head>
+    <meta charset="utf-8" />
+    <title>Omnicator</title>
+    <link rel="stylesheet" href="css/main.css" />
+  </head>
+  <body id="chats-output">
+    <!-- Fixed header with configuration menu and stats -->
+    <div class="hud-header">
+      <div class="menu">
+        <button class="header-btn" id="config-btn">Config</button>
+        <!-- Add more menu items as needed -->
+      </div>
+      <div class="stats">
+        <span id="token-count">Tokens Used: 0</span>
+        <span id="estimated-cost">Estimated Cost: $0.00</span>
+      </div>
+    </div>
+
+    <!-- Chat messages container -->
+    <div id="chat-messages">
+      <!-- More messages appended dynamically -->
+    </div>
+
+    <script type="module" src="src/main.mjs"></script>
+  </body>
+</html>

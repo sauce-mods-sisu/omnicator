@@ -1,0 +1,80 @@
+/* Global Styles */
+body {
+  background-color: #121212;
+  color: #e0e0e0;
+  margin: 0;
+  font-family: 'Orbitron', Arial, sans-serif;
+}
+
+/* Container for the header and chat messages */
+#chats-output {
+  position: relative;
+}
+
+/* Fixed HUD header */
+.hud-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 36px;
+  padding: 0 1rem;
+  background: rgba(0, 0, 0, 0.4);
+  border-bottom: 1px solid rgba(0, 255, 0, 0.05);
+  z-index: 1000;
+  user-select: none;
+  -webkit-app-region: drag;
+}
+
+/* Menu and stats areas inside the header */
+.hud-header .menu,
+.hud-header .stats {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  -webkit-app-region: no-drag;
+}
+
+/* Header button style */
+.header-btn {
+  background: #333;
+  color: #00ff00;
+  border: 1px solid #00ff00;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.header-btn:hover {
+  background: #00ff00;
+  color: #333;
+}
+
+/* Chat messages container */
+#chat-messages {
+  margin-top: 50px; /* Leaves space for the fixed header */
+  padding: 10px;
+}
+
+/* Message styling */
+.message {
+  background-color: #1e1e1e;
+  padding: 12px;
+  margin-bottom: 10px;
+  border-radius: 5px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  font-size: 16px;
+  word-wrap: break-word;
+}
+
+.message.system {
+  background-color: #e8f4ff;
+  border-left: 4px solid #007acc;
+  color: #000;
+}
