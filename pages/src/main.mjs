@@ -134,6 +134,9 @@ function updateCostDisplay() {
 
 /** Append a new message to the chat messages container **/
 function addMessageToChats(firstName, lastName, message, countryCode) {
+  firstName = firstName ?? "";
+  lastName = lastName ?? "";
+  
   const messageDiv = document.createElement('div');
   messageDiv.className = "message";
   
@@ -186,7 +189,6 @@ function addMessageToChats(firstName, lastName, message, countryCode) {
     chatMessages.removeChild(chatMessages.lastChild);
   }
 }
-
 
 
 /* ===============================
