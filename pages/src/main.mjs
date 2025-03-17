@@ -18,7 +18,6 @@ saveApiKeyBtn.addEventListener('click', () => {
 });
 
 /** DOM references **/
-const entireWindow = document.getElementById('omnicator');
 const chatWindow = document.getElementById('chats-output');
 const configBtn = document.getElementById('config-btn');
 const configPanel = document.getElementById('config-panel');
@@ -108,11 +107,11 @@ const chatGptUrl = 'https://api.openai.com/v1/chat/completions';
 let isDragging = false;
 let offsetX = 0;
 let offsetY = 0;
-chatWindow.addEventListener('mousedown', (e) => {
-  isDragging = true;
-  offsetX = e.clientX - chatWindow.offsetLeft;
-  offsetY = e.clientY - chatWindow.offsetTop;
-});
+// chatWindow.addEventListener('mousedown', (e) => {
+//   isDragging = true;
+//   offsetX = e.clientX - chatWindow.offsetLeft;
+//   offsetY = e.clientY - chatWindow.offsetTop;
+// });
 document.addEventListener('mousemove', (e) => {
   if (isDragging) {
     chatWindow.style.left = (e.clientX - offsetX) + 'px';
