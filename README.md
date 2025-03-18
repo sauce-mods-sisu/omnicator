@@ -1,7 +1,7 @@
 Omnicator - Universal Zwift Translator!
 =========================
 
-![Omnicator]
+![Omnicator](https://github.com/sauce-mods-sisu/omnicator/blob/master/Omnicator.png)
 
 
 ## Installing
@@ -21,7 +21,7 @@ Documents
 - Translates all Zwift messages to a language of your choosing
 
 ### Demos
-- Alpha:
+- Alpha: https://www.youtube.com/watch?v=976Q1auXvYc
 
 # Changelog 
 ------------------
