@@ -24,6 +24,7 @@ const configPanel = document.getElementById('config-panel');
 const closeConfigBtn = document.getElementById('close-config-btn');
 const saveConfigBtn = document.getElementById('save-config-btn');
 const configForm = document.getElementById('config-form'); // form inside config panel
+const languageSelect = document.getElementById('language-select');
 
 // New DOM references for the excluded countries dropdown and pills container.
 const excludedSelect = document.getElementById('excluded-country-codes-input');
@@ -34,13 +35,18 @@ const COST_PER_TOKEN_KEY = 'costPerTokenSetting';
 const EXCLUDED_COUNTRY_CODES_KEY = 'excludedCountryCodesSetting';
 const MESSAGE_TIMEOUT_KEY = 'messageTimeout';
 const MESSAGE_LIMIT_KEY = 'messageLimit';
+const USER_BASE_LANGUAGE_KEY = 'userLanguage';
 
 /** Global tracking variables **/
+const defaultLanguage = "English";
+const languageTokenPlaceholder = "{USER_LANGUAGE_OF_CHOICE}";
+
 let accumulatedTokens = 0;
 let accumulatedCost = 0;
 let costPerToken = parseFloat(common.settingsStore.get(COST_PER_TOKEN_KEY)) || 0.00000015;
 let messageTimeout = parseFloat(common.settingsStore.get(MESSAGE_TIMEOUT_KEY)) || 120; // default seconds
 let messageLimit = parseInt(common.settingsStore.get(MESSAGE_LIMIT_KEY)) || 8;
+let userLanguage = common.settingsStore.get(USER_BASE_LANGUAGE_KEY) || defaultLanguage;
 
 // Populate the dropdown for excluded countries using flagIcons data.
 for (const [code, data] of Object.entries(flagIcons)) {
@@ -89,9 +95,9 @@ function updateExcludedCountryPills() {
 updateExcludedCountryPills();
 
 /** ChatGPT role **/
-const chatGptRole = "You are a translator that identifies the language being written and translates to English. " +
-  "Return the determined language of the message in braces such as [English] " +
-  "followed by the translated message with nothing else. ";
+const chatGptRole = `You are a translator that identifies the language of the provided message and translates it to ${languageTokenPlaceholder}. ` +
+  `Return the name of language, translated to ${languageTokenPlaceholder}, in braces such as '[${languageTokenPlaceholder}]' ` +
+  `followed by the translated message, with nothing else.`;
 
 /**
  * Sample chat message:
@@ -107,11 +113,7 @@ const chatGptUrl = 'https://api.openai.com/v1/chat/completions';
 let isDragging = false;
 let offsetX = 0;
 let offsetY = 0;
-// chatWindow.addEventListener('mousedown', (e) => {
-//   isDragging = true;
-//   offsetX = e.clientX - chatWindow.offsetLeft;
-//   offsetY = e.clientY - chatWindow.offsetTop;
-// });
+
 document.addEventListener('mousemove', (e) => {
   if (isDragging) {
     chatWindow.style.left = (e.clientX - offsetX) + 'px';
@@ -189,7 +191,6 @@ function addMessageToChats(firstName, lastName, message, countryCode) {
   }
 }
 
-
 /* ===============================
    ChatGPT Completions & Translation
    =============================== */
@@ -201,7 +202,7 @@ function translate(message, firstName, lastName, countryCode) {
   const codeStr = String(countryCode).padStart(3, '0');
   
   if (excludedCountryCodes.has(codeStr)) {
-    console.log(`Not translating message from ${codeStr}`);
+    console.log(`Not translating message from user in home country of ${codeStr}`);
     addMessageToChats(firstName, lastName, message, codeStr);
     return;
   }
@@ -211,10 +212,11 @@ function translate(message, firstName, lastName, countryCode) {
     'Authorization': `Bearer ${apiKey}`
   };
   
+  let chatGptRoleReplacingLanguage = chatGptRole.replaceAll(languageTokenPlaceholder, userLanguage);
   const requestBody = {
     model: "gpt-4o-mini",
     messages: [
-      { role: "system", content: chatGptRole },
+      { role: "system", content: chatGptRoleReplacingLanguage },
       { role: "user", content: message }
     ]
   };
@@ -247,54 +249,76 @@ function translate(message, firstName, lastName, countryCode) {
 /* ===============================
    Configuration Panel Logic
    =============================== */
-function initConfigPanel() {
-  configBtn.addEventListener('click', () => {
-    configPanel.classList.remove('hidden');
-    const costInput = document.getElementById('cost-per-token-input');
-    if (costInput) costInput.value = costPerToken.toFixed(8);
-    const timeoutInput = document.getElementById('message-timeout');
-    if (timeoutInput) timeoutInput.value = messageTimeout;
-    const limitInput = document.getElementById('message-limit');
-    if (limitInput) limitInput.value = messageLimit;
-    updateExcludedCountryPills();
-  });
+/* ===============================
+   Configuration Panel Logic
+   =============================== */
+   function initConfigPanel() {
+    configBtn.addEventListener('click', () => {
+      configPanel.classList.remove('hidden');
   
-  closeConfigBtn.addEventListener('click', () => {
-    configPanel.classList.add('hidden');
-  });
+      const costInput = document.getElementById('cost-per-token-input');
+      if (costInput) costInput.value = costPerToken.toFixed(8);
   
-  const addExcludedBtn = document.getElementById('add-excluded-btn');
-  addExcludedBtn.addEventListener('click', () => {
-    const selectedCode = excludedSelect.value;
-    if (!excludedCountryCodes.has(selectedCode)) {
-      excludedCountryCodes.add(selectedCode);
+      const timeoutInput = document.getElementById('message-timeout');
+      if (timeoutInput) timeoutInput.value = messageTimeout;
+  
+      const limitInput = document.getElementById('message-limit');
+      if (limitInput) limitInput.value = messageLimit;
+  
+      // Set language dropdown value from the stored userLanguage
+      const languageSelect = document.getElementById('language-select');
+      if (languageSelect) languageSelect.value = userLanguage;
+  
       updateExcludedCountryPills();
-    }
-  });
+    });
   
-  saveConfigBtn.addEventListener('click', (e) => {
-    e.preventDefault();
-    const formData = new FormData(configForm);
-    const newCost = parseFloat(formData.get('cost-per-token-input'));
-    if (!isNaN(newCost)) {
-      costPerToken = newCost;
-      common.settingsStore.set(COST_PER_TOKEN_KEY, costPerToken.toString());
-    }
-    const newTimeout = parseFloat(formData.get('message-timeout'));
-    if (!isNaN(newTimeout)) {
-      messageTimeout = newTimeout;
-      common.settingsStore.set(MESSAGE_TIMEOUT_KEY, messageTimeout.toString());
-    }
-    const newLimit = parseInt(formData.get('message-limit'));
-    if (!isNaN(newLimit)) {
-      messageLimit = newLimit;
-      common.settingsStore.set(MESSAGE_LIMIT_KEY, messageLimit.toString());
-    }
-    common.settingsStore.set(EXCLUDED_COUNTRY_CODES_KEY, JSON.stringify(Array.from(excludedCountryCodes)));
-    configPanel.classList.add('hidden');
-  });
-}
-
+    closeConfigBtn.addEventListener('click', () => {
+      configPanel.classList.add('hidden');
+    });
+  
+    const addExcludedBtn = document.getElementById('add-excluded-btn');
+    addExcludedBtn.addEventListener('click', () => {
+      const selectedCode = excludedSelect.value;
+      if (!excludedCountryCodes.has(selectedCode)) {
+        excludedCountryCodes.add(selectedCode);
+        updateExcludedCountryPills();
+      }
+    });
+  
+    saveConfigBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const formData = new FormData(configForm);
+  
+      const newCost = parseFloat(formData.get('cost-per-token-input'));
+      if (!isNaN(newCost)) {
+        costPerToken = newCost;
+        common.settingsStore.set(COST_PER_TOKEN_KEY, costPerToken.toString());
+      }
+  
+      const newTimeout = parseFloat(formData.get('message-timeout'));
+      if (!isNaN(newTimeout)) {
+        messageTimeout = newTimeout;
+        common.settingsStore.set(MESSAGE_TIMEOUT_KEY, messageTimeout.toString());
+      }
+  
+      const newLimit = parseInt(formData.get('message-limit'));
+      if (!isNaN(newLimit)) {
+        messageLimit = newLimit;
+        common.settingsStore.set(MESSAGE_LIMIT_KEY, messageLimit.toString());
+      }
+  
+      // Save language selection from the dropdown
+      const newLanguage = formData.get('language-select');
+      if (newLanguage) {
+        userLanguage = newLanguage;
+        common.settingsStore.set(USER_BASE_LANGUAGE_KEY, userLanguage);
+      }
+  
+      common.settingsStore.set(EXCLUDED_COUNTRY_CODES_KEY, JSON.stringify(Array.from(excludedCountryCodes)));
+      configPanel.classList.add('hidden');
+    });
+  }
+  
 /* ===============================
    Main app (renderer, watchers)
    =============================== */
