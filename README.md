@@ -1,7 +1,7 @@
-SISU HUD - Minimalist HUD 
+Omnicator - Universal Zwift Translator!
 =========================
 
-![SISU HUD Logo](https://raw.githubusercontent.com/sauce-mods-sisu/sisu-hud/main/images/sisu-hud-logo.png)
+![Omnicator]
 
 
 ## Installing
@@ -18,14 +18,7 @@ Documents
 ## Usage
 ------------------
 ### Basic Features
-- Turn the mod on in Sauce Settings.
-- The window is draggable by the top config bar to place
-- The window is resizable by the bottom right-hand corner green box "resizeHandle"
-- Icons can be dragged into the order you want and will be saved
-- Right-clicking will make a stat visible that you don't care about
-- In the config bar you can "Reset Visibility" to restore all stat fields
-- Text scales and your scaling options are saved
-- Settings that allow you to set the color of the icons or values
+- Translates all Zwift messages to a language of your choosing
 
 ### Demos
 - Pilot: https://www.youtube.com/watch?v=o0c5v4ga8A0
@@ -35,63 +28,74 @@ Documents
 
 # Changelog 
 ------------------
-
-## 29 January 2025
-------------------
-- Opacity Fixes
-- Adding alpha to html and getting rid of background:transparent 
-
-## 24 January 2025
-------------------
-- Beta Release - 0.1.0
-- Settings tab with text/icon color
-- Settings modal also shows underlying window size and allows for appropriate resize
-
-## 22 January 2025
-------------------
-Alpha 0.0.2
-Fixed scaling bug
-
-## 20 January 2025
-------------------
-Alpha 0.0.2
-Added gradient stat
-Made progress with boungding box issue
-Added close button to window
-
-## 17 January 2025
-------------------
-Added icon/stat sort, visibility settings, and restoring
-
-## 15 January 2025
-------------------
-Alpha is Born: Resizable and fixed stats
+## March 17 2025
+- Alpha is born
 
 
-## Known Issues
-------------------
-- Time on Course is weird ¯\_(ツ)_/¯
-- All things are in metric because metric is just better (will fix as inclined)
- - p.s. you should be in metric because you get more xp! (20 per km, vs 30 per mile, conversion is 1.62 km per mile)
-- Bounding box and disappearing resizeHandle (square box)
- - Progress has been made, press Settings Button and it will reveal the Electron Window bounding box that you are free to resize
-- Distance on Pace Partners is also weird. ¯\_(ツ)_/¯
+# How to Acquire an OpenAI API Key
+
+This guide explains how to obtain and securely store an OpenAI API key for use in your application. Follow the steps below to get your key and keep it safe.
+Neither myself, nor anyone associated with Sauce LLC shall be liable for the costs incurred, including in the event of misplaced or stolen credentials.  
+Set very narrow budgets on your API key and use the warning/monitoring features available to you.  A few dollars should last months, if not years, so please please please
+set a tight budget around your API key.
+
+---
+
+## 1. Create an OpenAI Account
+
+- **Sign Up:**  
+  Visit the [OpenAI website](https://openai.com) and sign up for an account if you don’t have one already.
+  
+- **Verify Your Account:**  
+  Complete any necessary verification steps, such as confirming your email address.
+
+---
+
+## 2. Navigate to the API Keys Section
+
+- **Access Your Dashboard:**  
+  Once logged in, go to your [API keys page](https://platform.openai.com/account/api-keys) from your account dashboard.
+
+- **View Existing Keys:**  
+  Here, you can see any API keys you’ve already generated. If you’re new, this list will be empty.
+
+---
+
+## 3. Generate a New API Key
+
+- **Create a New Key:**  
+  Click on the **“Create new secret key”** button. A new API key will be generated immediately.
+
+- **Copy the Key:**  
+  Make sure to copy the key immediately because for security reasons, it may not be viewable again. Store it in a secure location (e.g., a password manager).
+
+---
+
+## 4. Limiting API Usage to a Budget
+
+- **Set a Spending Cap:**  
+  Log into your OpenAI account and navigate to your billing or usage settings. If available, configure a spending limit to automatically stop API usage once you reach your set threshold (e.g., $5).
+
+- **Monitor Regularly:**  
+  If a spending cap isn’t directly available, consider setting up usage alerts or employing third-party monitoring tools to keep track of your API consumption.
+
+- **Budget Management:**
+  Keeping your usage under a strict budget can prevent large unexpected bills and help maintain cost control during development or testing.
+---
 
 
 ## FAQ
 ==================================================
-### 1. Why call it SISU HUD?
-Sisu means 'go' in Finnish but more importantly it's the team I race with, I both wanted to celebrate them and make our opponents have to see our name everywhere!!! https://www.sisu.racing/
+### 1. Why must I enter my API Key every session?
+There is no really good way for a client-only application to store secrets (passwords, other sensitive data) without a backend and some type of authentication paradigm.
+Session storage relegates your key to only being used for that time.  I am sorry if it is a pain.
 
-### 2. What problem does SISU HUD solve?
-I have Zwift on a TV and was in a Team Time Trial (TTT) recently, we had scheduled pulls every 30 seconds.  I found it impossible to concentrate on my w/kg AND see the time remaining in my pull.  I was also a professional poker player in a former life and we had HUDs that displayed opponent's stats which was the main inspiration for SISU HUD, to place all relevant data right on your avatar (or whever you like).  
+### 2. What is the cost?
+I am currently using model `chatgpt-4o-mini` to perform translation which charges $0.15 per 1 million tokens used.  While I accurately track the number of tokens used, you will have to configure the cost per token in the Config panel.  While I will not be held liable for overages or charges, it has been incredibly cheap.  It depends on how chatty Zwfit is, but even under all day use in an event it's rare to see more than 100,000 tokens used.  Be sure to assign budgets to your API Key in the [API keys page](https://platform.openai.com/account/api-keys) 
 
-### 3. Where is ideal placement of the HUD on Zwift?
-I look forward to the creative ways the community uses this, I recommend placing in very near to your rider/avatar.  I think it's important to watch your rider as closely as possible during races to pick up cues from your competitors and to maximize the draft.  Having all of your relevant data nearer your focal point solves the problem of split attention.
+### 3. I don't see my language, can it be added?
+Most likely it can easily be added, leave me a message on Discord or in the Github repo
 
-## Future Features
-------------------
-- Support for Imperial and/or your Zwift setting (if I can get to it)
-- Color gradients corresponding to ranges for some stats like wBal or whatnot
-- Maybe way off in the distant future the ability to have multiple windows and pin to riders
-- Profiles
+### 4. These translations are awful!
+I am sorry!
+

@@ -96,8 +96,7 @@ updateExcludedCountryPills();
 
 /** ChatGPT role **/
 const chatGptRole = `You are a translator that identifies the language of the provided message and translates it to ${languageTokenPlaceholder}. ` +
-  `Return the name of language, translated to ${languageTokenPlaceholder}, in braces such as '[${languageTokenPlaceholder}]' ` +
-  `followed by the translated message, with nothing else.`;
+  `Return the name of language, translated to ${languageTokenPlaceholder}, inside braces [...] followed by the translated message, with nothing else.`;
 
 /**
  * Sample chat message:
@@ -286,6 +285,7 @@ function translate(message, firstName, lastName, countryCode) {
     });
   
     saveConfigBtn.addEventListener('click', (e) => {
+      console.log("Saving options");
       e.preventDefault();
       const formData = new FormData(configForm);
   
@@ -307,10 +307,10 @@ function translate(message, firstName, lastName, countryCode) {
         common.settingsStore.set(MESSAGE_LIMIT_KEY, messageLimit.toString());
       }
   
-      // Save language selection from the dropdown
       const newLanguage = formData.get('language-select');
       if (newLanguage) {
         userLanguage = newLanguage;
+        console.log(`Setting new language to ${userLanguage}`);
         common.settingsStore.set(USER_BASE_LANGUAGE_KEY, userLanguage);
       }
   
