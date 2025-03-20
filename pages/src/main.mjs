@@ -36,6 +36,7 @@ const EXCLUDED_COUNTRY_CODES_KEY = 'excludedCountryCodesSetting';
 const MESSAGE_TIMEOUT_KEY = 'messageTimeout';
 const MESSAGE_LIMIT_KEY = 'messageLimit';
 const USER_BASE_LANGUAGE_KEY = 'userLanguage';
+const CLICK_TO_RETRANSLATE_KEY = 'clickToRetranslateSetting'; // new key
 
 /** Global tracking variables **/
 const defaultLanguage = "English";
@@ -46,8 +47,15 @@ let accumulatedCost = 0;
 let costPerToken = parseFloat(common.settingsStore.get(COST_PER_TOKEN_KEY)) || 0.00000015;
 let messageTimeout = parseFloat(common.settingsStore.get(MESSAGE_TIMEOUT_KEY)) || 120; // default seconds
 let messageLimit = parseInt(common.settingsStore.get(MESSAGE_LIMIT_KEY)) || 8;
-// NOTE: Instead of relying solely on the global variable, we now reload it when needed.
 let userLanguage = common.settingsStore.get(USER_BASE_LANGUAGE_KEY) || defaultLanguage;
+
+// Load the click-to-retranslate setting from storage (default true)
+let clickToRetranslateEnabled = common.settingsStore.get(CLICK_TO_RETRANSLATE_KEY);
+if (clickToRetranslateEnabled === null || clickToRetranslateEnabled === undefined) {
+  clickToRetranslateEnabled = true;
+} else {
+  clickToRetranslateEnabled = clickToRetranslateEnabled === "true";
+}
 
 // Populate the dropdown for excluded countries using flagIcons data.
 for (const [code, data] of Object.entries(flagIcons)) {
@@ -247,7 +255,6 @@ function addMessageToChats(translationResult) {
   chatContainerSpan.appendChild(messageText);
   messageDiv.appendChild(chatContainerSpan);
   
-  // Attach click event for re-translation.
   messageDiv.addEventListener('click', () => {
     reTranslateMessage(messageDiv);
   });
@@ -271,6 +278,9 @@ function addMessageToChats(translationResult) {
    Re-translation on Message Click
    =============================== */
 function reTranslateMessage(messageDiv) {
+
+  if (!clickToRetranslateEnabled) return;
+
   const originalMessage = messageDiv.getAttribute('data-original-message');
   const firstName = messageDiv.getAttribute('data-first-name');
   const lastName = messageDiv.getAttribute('data-last-name');
@@ -329,6 +339,13 @@ function initConfigPanel() {
       languageSelect.value = userLanguage;
       updateHudHeaderLanguage();
     }
+  
+    // Load the click-to-retranslate checkbox state.
+    const clickToRetranslateCheckbox = document.getElementById('click-to-translate-control');
+    if (clickToRetranslateCheckbox) {
+      clickToRetranslateCheckbox.checked = clickToRetranslateEnabled;
+    }
+  
     updateExcludedCountryPills();
   });
   
@@ -374,6 +391,13 @@ function initConfigPanel() {
       console.log(`Setting new language to ${userLanguage}`);
       common.settingsStore.set(USER_BASE_LANGUAGE_KEY, userLanguage);
       updateHudHeaderLanguage();
+    }
+  
+    // Save the click-to-retranslate setting.
+    const clickToRetranslateCheckbox = document.getElementById('click-to-translate-control');
+    if (clickToRetranslateCheckbox) {
+      clickToRetranslateEnabled = clickToRetranslateCheckbox.checked;
+      common.settingsStore.set(CLICK_TO_RETRANSLATE_KEY, clickToRetranslateEnabled.toString());
     }
   
     common.settingsStore.set(EXCLUDED_COUNTRY_CODES_KEY, JSON.stringify(Array.from(excludedCountryCodes)));
