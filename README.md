@@ -25,6 +25,10 @@ Documents
 
 # Changelog 
 ------------------
+## March 20 2025
+- Selected Language is now featured in the header
+- Clicking on any message restranslates it - a useful feature for if you have changed the userLanguage
+
 ## March 17 2025
 - Alpha is born
 

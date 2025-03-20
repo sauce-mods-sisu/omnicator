@@ -46,6 +46,7 @@ let accumulatedCost = 0;
 let costPerToken = parseFloat(common.settingsStore.get(COST_PER_TOKEN_KEY)) || 0.00000015;
 let messageTimeout = parseFloat(common.settingsStore.get(MESSAGE_TIMEOUT_KEY)) || 120; // default seconds
 let messageLimit = parseInt(common.settingsStore.get(MESSAGE_LIMIT_KEY)) || 8;
+// NOTE: Instead of relying solely on the global variable, we now reload it when needed.
 let userLanguage = common.settingsStore.get(USER_BASE_LANGUAGE_KEY) || defaultLanguage;
 
 // Populate the dropdown for excluded countries using flagIcons data.
@@ -99,10 +100,7 @@ const chatGptRole = `You are a translator that identifies the language of the pr
   `Return the name of language, translated to ${languageTokenPlaceholder}, inside braces [...] followed by the translated message, with nothing else.`;
 
 /**
- * Sample chat message:
- * {"from":4840821,"to":0,"_f3":1,"firstName":"Ryan","lastName":"M. YT@RideItBetterCycling",
- * "message":"Testing","avatar":"https://static-cdn.zwift.com/prod/profile/dcca3831-3085098",
- * "countryCode":840,"eventSubgroup":0,"ts":1742095490940.415,"team":"SISU"}
+ * ChatGPT API URL
  */
 const chatGptUrl = 'https://api.openai.com/v1/chat/completions';
 
@@ -132,50 +130,129 @@ function updateCostDisplay() {
   estimatedCostEl.textContent = `Estimated Cost: $${accumulatedCost.toFixed(4)}`;
 }
 
-/** Append a new message to the chat messages container **/
-function addMessageToChats(firstName, lastName, message, countryCode) {
-  firstName = firstName ?? "";
-  lastName = lastName ?? "";
+/* ===============================
+   ChatGPT Completions & Translation (Model)
+   =============================== */
+/**
+ * Translates a message using the ChatGPT API.
+ * Returns a promise that resolves to an object:
+ * {
+ *   firstName,
+ *   lastName,
+ *   countryCode,      // padded, e.g. "840"
+ *   originalMessage,
+ *   translatedMessage
+ * }
+ */
+async function translate(message, firstName, lastName, countryCode) {
+  const codeStr = String(countryCode).padStart(3, '0');
+  
+  // If the country is excluded, return the original message.
+  if (excludedCountryCodes.has(codeStr)) {
+    return {
+      firstName,
+      lastName,
+      countryCode: codeStr,
+      originalMessage: message,
+      translatedMessage: message
+    };
+  }
+  
+  const headers = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${apiKey}`
+  };
+  
+  // Always reload the language from storage in case it changed.
+  userLanguage = common.settingsStore.get(USER_BASE_LANGUAGE_KEY) || defaultLanguage;
+  const chatGptRoleReplacingLanguage = chatGptRole.replaceAll(languageTokenPlaceholder, userLanguage);
+  const requestBody = {
+    model: "gpt-4o-mini",
+    messages: [
+      { role: "system", content: chatGptRoleReplacingLanguage },
+      { role: "user", content: message }
+    ]
+  };
+  
+  try {
+    const response = await fetch(chatGptUrl, {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify(requestBody)
+    });
+    const data = await response.json();
+    console.log("ChatGPT response:", data);
+    const translatedMessage = data.choices[0]?.message?.content;
+    if (!translatedMessage) {
+      throw new Error("No translated message received");
+    }
+    if (data.usage && data.usage.total_tokens) {
+      accumulatedTokens += data.usage.total_tokens;
+      accumulatedCost += data.usage.total_tokens * costPerToken;
+      updateCostDisplay();
+    }
+    return {
+      firstName,
+      lastName,
+      countryCode: codeStr,
+      originalMessage: message,
+      translatedMessage: translatedMessage
+    };
+  } catch (error) {
+    console.error('Error during translation:', error);
+    throw error;
+  }
+}
+
+/* ===============================
+   View Logic: Adding Message to Chats
+   =============================== */
+function addMessageToChats(translationResult) {
+  const { firstName, lastName, countryCode, originalMessage, translatedMessage } = translationResult;
   
   const messageDiv = document.createElement('div');
   messageDiv.className = "message";
   
-  // Convert countryCode (number) to a string with leading zeros (3 digits)
-  const codeStr = String(countryCode).padStart(3, '0');
+  // Store original data for re-translation.
+  messageDiv.setAttribute('data-original-message', originalMessage);
+  messageDiv.setAttribute('data-first-name', firstName);
+  messageDiv.setAttribute('data-last-name', lastName);
+  messageDiv.setAttribute('data-country-code', countryCode);
   
   const chatContainerSpan = document.createElement('span');
-
+  
   // Create a span for the message name.
   const messageName = document.createElement('span');
   messageName.className = "message-name";
   messageName.textContent = `${firstName} ${lastName}`;
-
+  
   // Create a text node for the colon separator.
   const colonText = document.createTextNode(': ');
-
+  
   // Create a span for the message text.
   const messageText = document.createElement('span');
   messageText.className = "message-text";
-  messageText.textContent = message;
-
-  if (codeStr in flagIcons) {
+  messageText.textContent = translatedMessage;
+  
+  if (countryCode in flagIcons) {
     const flagImg = document.createElement('img');
-    flagImg.src = flagIcons[codeStr].url;
+    flagImg.src = flagIcons[countryCode].url;
     flagImg.alt = "Flag";
-    flagImg.className = "message-flag"; // Use CSS to control size.
+    flagImg.className = "message-flag";
     chatContainerSpan.appendChild(flagImg);
   }
   
-  // Append elements in the desired order.
   chatContainerSpan.appendChild(messageName);
   chatContainerSpan.appendChild(colonText);
   chatContainerSpan.appendChild(messageText);
-
   messageDiv.appendChild(chatContainerSpan);
   
-  const chatMessages = document.getElementById('chat-messages');
+  // Attach click event for re-translation.
+  messageDiv.addEventListener('click', () => {
+    reTranslateMessage(messageDiv);
+  });
   
-  // Insert new messages at the top.
+  const chatMessages = document.getElementById('chat-messages');
   chatMessages.insertBefore(messageDiv, chatMessages.firstChild);
   
   setTimeout(() => {
@@ -191,141 +268,131 @@ function addMessageToChats(firstName, lastName, message, countryCode) {
 }
 
 /* ===============================
-   ChatGPT Completions & Translation
+   Re-translation on Message Click
    =============================== */
-/**
- * Translates a message using the ChatGPT API.
- * If the country code is in the excluded list, displays the original message.
- */
-function translate(message, firstName, lastName, countryCode) {
-  const codeStr = String(countryCode).padStart(3, '0');
+function reTranslateMessage(messageDiv) {
+  const originalMessage = messageDiv.getAttribute('data-original-message');
+  const firstName = messageDiv.getAttribute('data-first-name');
+  const lastName = messageDiv.getAttribute('data-last-name');
+  const countryCode = messageDiv.getAttribute('data-country-code');
   
-  if (excludedCountryCodes.has(codeStr)) {
-    console.log(`Not translating message from user in home country of ${codeStr}`);
-    addMessageToChats(firstName, lastName, message, codeStr);
+  // If the country is excluded, skip re-translation.
+  if (excludedCountryCodes.has(countryCode)) {
+    console.log(`Re-translation skipped for excluded country ${countryCode}`);
     return;
   }
   
-  const headers = {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${apiKey}`
-  };
-  
-  let chatGptRoleReplacingLanguage = chatGptRole.replaceAll(languageTokenPlaceholder, userLanguage);
-  const requestBody = {
-    model: "gpt-4o-mini",
-    messages: [
-      { role: "system", content: chatGptRoleReplacingLanguage },
-      { role: "user", content: message }
-    ]
-  };
-  
-  fetch(chatGptUrl, {
-    method: 'POST',
-    headers: headers,
-    body: JSON.stringify(requestBody)
-  })
-    .then(response => response.json())
-    .then(data => {
-      console.log("ChatGPT response:", data);
-      const translatedMessage = data.choices[0]?.message?.content;
-      if (translatedMessage) {
-        addMessageToChats(firstName, lastName, translatedMessage, codeStr);
-      } else {
-        console.error("No translated message received", data);
-      }
-      if (data.usage && data.usage.total_tokens) {
-        accumulatedTokens += data.usage.total_tokens;
-        accumulatedCost += data.usage.total_tokens * costPerToken;
-        updateCostDisplay();
+  translate(originalMessage, firstName, lastName, countryCode)
+    .then(result => {
+      const messageText = messageDiv.querySelector('.message-text');
+      if (messageText) {
+        messageText.textContent = result.translatedMessage;
       }
     })
-    .catch(error => {
-      console.error('Error:', error);
-    });
+    .catch(error => console.error('Error during re-translation:', error));
+}
+
+/* ===============================
+   Header Update for Language Display
+   =============================== */
+// Reload the language value from storage before updating the header.
+function updateHudHeaderLanguage() {
+  userLanguage = common.settingsStore.get(USER_BASE_LANGUAGE_KEY) || defaultLanguage;
+  languageSelect.value = userLanguage;
+  const hudLanguageDisplay = document.getElementById('hud-language-display');
+  const selectedOption = languageSelect.options[languageSelect.selectedIndex];
+  if (hudLanguageDisplay && selectedOption) {
+    hudLanguageDisplay.textContent = selectedOption.textContent;
+  }
 }
 
 /* ===============================
    Configuration Panel Logic
    =============================== */
-/* ===============================
-   Configuration Panel Logic
-   =============================== */
-   function initConfigPanel() {
-    configBtn.addEventListener('click', () => {
-      configPanel.classList.remove('hidden');
+function initConfigPanel() {
+  configBtn.addEventListener('click', () => {
+    configPanel.classList.remove('hidden');
   
-      const costInput = document.getElementById('cost-per-token-input');
-      if (costInput) costInput.value = costPerToken.toFixed(8);
+    const costInput = document.getElementById('cost-per-token-input');
+    if (costInput) costInput.value = costPerToken.toFixed(8);
   
-      const timeoutInput = document.getElementById('message-timeout');
-      if (timeoutInput) timeoutInput.value = messageTimeout;
+    const timeoutInput = document.getElementById('message-timeout');
+    if (timeoutInput) timeoutInput.value = messageTimeout;
   
-      const limitInput = document.getElementById('message-limit');
-      if (limitInput) limitInput.value = messageLimit;
+    const limitInput = document.getElementById('message-limit');
+    if (limitInput) limitInput.value = messageLimit;
   
-      // Set language dropdown value from the stored userLanguage
-      const languageSelect = document.getElementById('language-select');
-      if (languageSelect) languageSelect.value = userLanguage;
+    // Set language dropdown value from the stored userLanguage.
+    const languageSelect = document.getElementById('language-select');
+    if (languageSelect) {
+      userLanguage = common.settingsStore.get(USER_BASE_LANGUAGE_KEY) || defaultLanguage;
+      languageSelect.value = userLanguage;
+      updateHudHeaderLanguage();
+    }
+    updateExcludedCountryPills();
+  });
   
+  closeConfigBtn.addEventListener('click', () => {
+    configPanel.classList.add('hidden');
+  });
+  
+  const addExcludedBtn = document.getElementById('add-excluded-btn');
+  addExcludedBtn.addEventListener('click', () => {
+    const selectedCode = excludedSelect.value;
+    if (!excludedCountryCodes.has(selectedCode)) {
+      excludedCountryCodes.add(selectedCode);
       updateExcludedCountryPills();
-    });
+    }
+  });
   
-    closeConfigBtn.addEventListener('click', () => {
-      configPanel.classList.add('hidden');
-    });
+  saveConfigBtn.addEventListener('click', (e) => {
+    console.log("Saving options");
+    e.preventDefault();
+    const formData = new FormData(configForm);
   
-    const addExcludedBtn = document.getElementById('add-excluded-btn');
-    addExcludedBtn.addEventListener('click', () => {
-      const selectedCode = excludedSelect.value;
-      if (!excludedCountryCodes.has(selectedCode)) {
-        excludedCountryCodes.add(selectedCode);
-        updateExcludedCountryPills();
-      }
-    });
+    const newCost = parseFloat(formData.get('cost-per-token-input'));
+    if (!isNaN(newCost)) {
+      costPerToken = newCost;
+      common.settingsStore.set(COST_PER_TOKEN_KEY, costPerToken.toString());
+    }
   
-    saveConfigBtn.addEventListener('click', (e) => {
-      console.log("Saving options");
-      e.preventDefault();
-      const formData = new FormData(configForm);
+    const newTimeout = parseFloat(formData.get('message-timeout'));
+    if (!isNaN(newTimeout)) {
+      messageTimeout = newTimeout;
+      common.settingsStore.set(MESSAGE_TIMEOUT_KEY, messageTimeout.toString());
+    }
   
-      const newCost = parseFloat(formData.get('cost-per-token-input'));
-      if (!isNaN(newCost)) {
-        costPerToken = newCost;
-        common.settingsStore.set(COST_PER_TOKEN_KEY, costPerToken.toString());
-      }
+    const newLimit = parseInt(formData.get('message-limit'));
+    if (!isNaN(newLimit)) {
+      messageLimit = newLimit;
+      common.settingsStore.set(MESSAGE_LIMIT_KEY, messageLimit.toString());
+    }
   
-      const newTimeout = parseFloat(formData.get('message-timeout'));
-      if (!isNaN(newTimeout)) {
-        messageTimeout = newTimeout;
-        common.settingsStore.set(MESSAGE_TIMEOUT_KEY, messageTimeout.toString());
-      }
+    const newLanguage = formData.get('language-select');
+    if (newLanguage) {
+      userLanguage = newLanguage;
+      console.log(`Setting new language to ${userLanguage}`);
+      common.settingsStore.set(USER_BASE_LANGUAGE_KEY, userLanguage);
+      updateHudHeaderLanguage();
+    }
   
-      const newLimit = parseInt(formData.get('message-limit'));
-      if (!isNaN(newLimit)) {
-        messageLimit = newLimit;
-        common.settingsStore.set(MESSAGE_LIMIT_KEY, messageLimit.toString());
-      }
-  
-      const newLanguage = formData.get('language-select');
-      if (newLanguage) {
-        userLanguage = newLanguage;
-        console.log(`Setting new language to ${userLanguage}`);
-        common.settingsStore.set(USER_BASE_LANGUAGE_KEY, userLanguage);
-      }
-  
-      common.settingsStore.set(EXCLUDED_COUNTRY_CODES_KEY, JSON.stringify(Array.from(excludedCountryCodes)));
-      configPanel.classList.add('hidden');
-    });
-  }
-  
+    common.settingsStore.set(EXCLUDED_COUNTRY_CODES_KEY, JSON.stringify(Array.from(excludedCountryCodes)));
+    configPanel.classList.add('hidden');
+  });
+}
+
 /* ===============================
    Main app (renderer, watchers)
    =============================== */
 async function main() {
   common.subscribe('chat', async messageData => {
     const { firstName, lastName, countryCode, message } = messageData;
-    translate(message, firstName, lastName, countryCode);
+    try {
+      const result = await translate(message, firstName, lastName, countryCode);
+      addMessageToChats(result);
+    } catch (error) {
+      console.error("Translation error:", error);
+    }
   });
 }
 
@@ -337,6 +404,8 @@ function init() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Load the stored language and update the header immediately.
+  updateHudHeaderLanguage();
   init();
   main();
 });
