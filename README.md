@@ -25,6 +25,44 @@ Documents
 
 # Changelog 
 ------------------
+## Aug 31 2025 (0.0.2)
+- Chats now come from all of the sources, including events
+- Indicator shown in chat on where it's coming from
+- Added regional languages:
+  - Vlaams
+  - Frysk
+  - Walon
+  - Lëtzebuergesch
+  - Cymraeg
+  - Kernewek
+  - Gaelg
+  - Brezhoneg
+  - Occitan
+  - Elsässisch
+  - Corsu
+  - Asturianu
+  - Aragonés
+  - Mirandés
+  - Sardu
+  - Sicilianu
+  - Nnapulitano
+  - Vèneto
+  - Lumbaart
+  - Piemontèis
+  - Lìguru
+  - Emiliân–Rumagnòl
+  - Furlan
+  - Ladin
+  - Rumantsch
+  - Føroyskt
+  - Davvisámegiella
+  - Norsk nynorsk
+  - Norsk bokmål
+  - Crnogorski
+  - Беларуская
+  - Malti
+  - Klingon (for the lulz)
+
 ## March 20 2025
 - Selected Language is now featured in the header
 - Clicking on any message restranslates it - a useful feature for if you have changed the userLanguage
@@ -89,10 +127,10 @@ set a tight budget around your API key.
 ==================================================
 ### 1. Why must I enter my API Key every session?
 There is no really good way for a client-only application to store secrets (passwords, other sensitive data) without a backend and some type of authentication paradigm.
-Session storage relegates your key to only being used for that time.  I am sorry if it is a pain.
+Session storage relegates your key to only being used for that time.  I am sorry if it is a pain.  I am toying with the idea of making a proxy service such that I can expose a budgeted API key for all folks to use and gauge the usage.  It's $0.60 per million tokens, I don't mind spending $10-$20/month but would be grumpy if it starts costing me $$$/month.
 
 ### 2. What is the cost?
-I am currently using model `chatgpt-4o-mini` to perform translation which charges $0.15 per 1 million tokens used.  While I accurately track the number of tokens used, you will have to configure the cost per token in the Config panel.  While I will not be held liable for overages or charges, it has been incredibly cheap.  It depends on how chatty Zwfit is, but even under all day use in an event it's rare to see more than 100,000 tokens used.  Be sure to assign budgets to your API Key in the [API keys page](https://platform.openai.com/account/api-keys) 
+I am currently using model `chatgpt-4o-mini` to perform translation which charges $0.60 per 1 million tokens used.  While I accurately track the number of tokens used, you will have to configure the cost per token in the Config panel.  While I will not be held liable for overages or charges, it has been incredibly cheap.  It depends on how chatty Zwfit is, but even under all day use in an event it's rare to see more than 100,000 tokens used.  Be sure to assign budgets to your API Key in the [API keys page](https://platform.openai.com/account/api-keys) 
 
 ### 3. I don't see my language, can it be added?
 Most likely it can easily be added, leave me a message on Discord or in the Github repo
@@ -100,3 +138,5 @@ Most likely it can easily be added, leave me a message on Discord or in the Gith
 ### 4. These translations are awful!
 I am sorry!
 
+### 5. My Language isn't shown!
+Leave me a message in the Repo, on Zwift, on my YouTube and I'll add it.  One of the things I'm most proud of is this implementation makes it extremely trivial to add a new language.

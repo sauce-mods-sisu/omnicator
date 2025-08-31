@@ -2,7 +2,6 @@ import * as common from '/pages/src/common.mjs';
 import { flagIcons } from './flags.js';
 
 /** Ephemeral API Key Setup **/
-// Check sessionStorage for API key; if not found, show the API key modal.
 let apiKey = sessionStorage.getItem('userApiKey');
 if (!apiKey) {
   document.getElementById('api-key-modal').classList.remove('hidden');
@@ -89,7 +88,7 @@ function updateExcludedCountryPills() {
     const pill = document.createElement('span');
     pill.className = 'excluded-pill';
     pill.textContent = flagIcons[code]?.name || code;
-    
+
     const removeBtn = document.createElement('button');
     removeBtn.textContent = '×';
     removeBtn.className = 'remove-pill-btn';
@@ -139,6 +138,17 @@ function updateCostDisplay() {
 }
 
 /* ===============================
+   Lightweight state for minimal intrusion
+   =============================== */
+let isOnline = true;           // Pause translation if offline
+let inEvent = false;           // Helps label/route chat subtly
+const mutedKey = (fn, ln) => `${(fn||'').trim().toLowerCase()}|${(ln||'').trim().toLowerCase()}`;
+const mutedSenders = new Set(); // Optional mute reflection
+
+// One-time logger to avoid spam if topics are missing
+const missingTopicLogged = new Set();
+
+/* ===============================
    ChatGPT Completions & Translation (Model)
    =============================== */
 /**
@@ -149,28 +159,30 @@ function updateCostDisplay() {
  *   lastName,
  *   countryCode,      // padded, e.g. "840"
  *   originalMessage,
- *   translatedMessage
+ *   translatedMessage,
+ *   channel           // optional: 'chat' | 'event_chat' | 'club_chat' | 'direct_chat' | 'system_chat'
  * }
  */
-async function translate(message, firstName, lastName, countryCode) {
+async function translate(message, firstName, lastName, countryCode, channel) {
   const codeStr = String(countryCode).padStart(3, '0');
-  
+
   // If the country is excluded, return the original message.
-  if (excludedCountryCodes.has(codeStr)) {
+  if (excludedCountryCodes.has(codeStr) || !isOnline) {
     return {
       firstName,
       lastName,
       countryCode: codeStr,
       originalMessage: message,
-      translatedMessage: message
+      translatedMessage: message,
+      channel
     };
   }
-  
+
   const headers = {
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${apiKey}`
   };
-  
+
   // Always reload the language from storage in case it changed.
   userLanguage = common.settingsStore.get(USER_BASE_LANGUAGE_KEY) || defaultLanguage;
   const chatGptRoleReplacingLanguage = chatGptRole.replaceAll(languageTokenPlaceholder, userLanguage);
@@ -181,7 +193,7 @@ async function translate(message, firstName, lastName, countryCode) {
       { role: "user", content: message }
     ]
   };
-  
+
   try {
     const response = await fetch(chatGptUrl, {
       method: 'POST',
@@ -189,8 +201,7 @@ async function translate(message, firstName, lastName, countryCode) {
       body: JSON.stringify(requestBody)
     });
     const data = await response.json();
-    console.log("ChatGPT response:", data);
-    const translatedMessage = data.choices[0]?.message?.content;
+    const translatedMessage = data.choices?.[0]?.message?.content;
     if (!translatedMessage) {
       throw new Error("No translated message received");
     }
@@ -204,11 +215,20 @@ async function translate(message, firstName, lastName, countryCode) {
       lastName,
       countryCode: codeStr,
       originalMessage: message,
-      translatedMessage: translatedMessage
+      translatedMessage,
+      channel
     };
   } catch (error) {
     console.error('Error during translation:', error);
-    throw error;
+    // Minimal intrusion fallback: show original
+    return {
+      firstName,
+      lastName,
+      countryCode: codeStr,
+      originalMessage: message,
+      translatedMessage: message,
+      channel
+    };
   }
 }
 
@@ -216,32 +236,43 @@ async function translate(message, firstName, lastName, countryCode) {
    View Logic: Adding Message to Chats
    =============================== */
 function addMessageToChats(translationResult) {
-  const { firstName, lastName, countryCode, originalMessage, translatedMessage } = translationResult;
-  
+  const { firstName, lastName, countryCode, originalMessage, translatedMessage, channel } = translationResult;
+
   const messageDiv = document.createElement('div');
   messageDiv.className = "message";
-  
+
   // Store original data for re-translation.
   messageDiv.setAttribute('data-original-message', originalMessage);
   messageDiv.setAttribute('data-first-name', firstName);
   messageDiv.setAttribute('data-last-name', lastName);
   messageDiv.setAttribute('data-country-code', countryCode);
-  
+
   const chatContainerSpan = document.createElement('span');
-  
+
+  // Optional small channel badge (non-intrusive; invisible if no styles)
+  if (channel) {
+    const ch = document.createElement('span');
+    ch.className = 'message-channel';
+    // Keep it terse so it doesn't clutter; 'event' instead of 'event_chat'
+    ch.textContent = `【${channel.replace('_chat', '').replace('chat', 'nearby')}】`;
+    ch.style.marginRight = '0.25rem';
+    ch.style.opacity = '0.75';
+    chatContainerSpan.appendChild(ch);
+  }
+
   // Create a span for the message name.
   const messageName = document.createElement('span');
   messageName.className = "message-name";
   messageName.textContent = `${firstName} ${lastName}`;
-  
+
   // Create a text node for the colon separator.
   const colonText = document.createTextNode(': ');
-  
+
   // Create a span for the message text.
   const messageText = document.createElement('span');
   messageText.className = "message-text";
   messageText.textContent = translatedMessage;
-  
+
   if (countryCode in flagIcons) {
     const flagImg = document.createElement('img');
     flagImg.src = flagIcons[countryCode].url;
@@ -249,25 +280,25 @@ function addMessageToChats(translationResult) {
     flagImg.className = "message-flag";
     chatContainerSpan.appendChild(flagImg);
   }
-  
+
   chatContainerSpan.appendChild(messageName);
   chatContainerSpan.appendChild(colonText);
   chatContainerSpan.appendChild(messageText);
   messageDiv.appendChild(chatContainerSpan);
-  
+
   messageDiv.addEventListener('click', () => {
     reTranslateMessage(messageDiv);
   });
-  
+
   const chatMessages = document.getElementById('chat-messages');
   chatMessages.insertBefore(messageDiv, chatMessages.firstChild);
-  
+
   setTimeout(() => {
     if (messageDiv.parentElement === chatMessages) {
       chatMessages.removeChild(messageDiv);
     }
   }, messageTimeout * 1000);
-  
+
   // Enforce the configured message limit.
   while (chatMessages.childNodes.length > messageLimit) {
     chatMessages.removeChild(chatMessages.lastChild);
@@ -278,20 +309,19 @@ function addMessageToChats(translationResult) {
    Re-translation on Message Click
    =============================== */
 function reTranslateMessage(messageDiv) {
-
   if (!clickToRetranslateEnabled) return;
 
   const originalMessage = messageDiv.getAttribute('data-original-message');
   const firstName = messageDiv.getAttribute('data-first-name');
   const lastName = messageDiv.getAttribute('data-last-name');
   const countryCode = messageDiv.getAttribute('data-country-code');
-  
+
   // If the country is excluded, skip re-translation.
   if (excludedCountryCodes.has(countryCode)) {
     console.log(`Re-translation skipped for excluded country ${countryCode}`);
     return;
   }
-  
+
   translate(originalMessage, firstName, lastName, countryCode)
     .then(result => {
       const messageText = messageDiv.querySelector('.message-text');
@@ -322,16 +352,16 @@ function updateHudHeaderLanguage() {
 function initConfigPanel() {
   configBtn.addEventListener('click', () => {
     configPanel.classList.remove('hidden');
-  
+
     const costInput = document.getElementById('cost-per-token-input');
     if (costInput) costInput.value = costPerToken.toFixed(8);
-  
+
     const timeoutInput = document.getElementById('message-timeout');
     if (timeoutInput) timeoutInput.value = messageTimeout;
-  
+
     const limitInput = document.getElementById('message-limit');
     if (limitInput) limitInput.value = messageLimit;
-  
+
     // Set language dropdown value from the stored userLanguage.
     const languageSelect = document.getElementById('language-select');
     if (languageSelect) {
@@ -339,20 +369,20 @@ function initConfigPanel() {
       languageSelect.value = userLanguage;
       updateHudHeaderLanguage();
     }
-  
+
     // Load the click-to-retranslate checkbox state.
     const clickToRetranslateCheckbox = document.getElementById('click-to-translate-control');
     if (clickToRetranslateCheckbox) {
       clickToRetranslateCheckbox.checked = clickToRetranslateEnabled;
     }
-  
+
     updateExcludedCountryPills();
   });
-  
+
   closeConfigBtn.addEventListener('click', () => {
     configPanel.classList.add('hidden');
   });
-  
+
   const addExcludedBtn = document.getElementById('add-excluded-btn');
   addExcludedBtn.addEventListener('click', () => {
     const selectedCode = excludedSelect.value;
@@ -361,30 +391,30 @@ function initConfigPanel() {
       updateExcludedCountryPills();
     }
   });
-  
+
   saveConfigBtn.addEventListener('click', (e) => {
     console.log("Saving options");
     e.preventDefault();
     const formData = new FormData(configForm);
-  
+
     const newCost = parseFloat(formData.get('cost-per-token-input'));
     if (!isNaN(newCost)) {
       costPerToken = newCost;
       common.settingsStore.set(COST_PER_TOKEN_KEY, costPerToken.toString());
     }
-  
+
     const newTimeout = parseFloat(formData.get('message-timeout'));
     if (!isNaN(newTimeout)) {
       messageTimeout = newTimeout;
       common.settingsStore.set(MESSAGE_TIMEOUT_KEY, messageTimeout.toString());
     }
-  
+
     const newLimit = parseInt(formData.get('message-limit'));
     if (!isNaN(newLimit)) {
       messageLimit = newLimit;
       common.settingsStore.set(MESSAGE_LIMIT_KEY, messageLimit.toString());
     }
-  
+
     const newLanguage = formData.get('language-select');
     if (newLanguage) {
       userLanguage = newLanguage;
@@ -392,30 +422,133 @@ function initConfigPanel() {
       common.settingsStore.set(USER_BASE_LANGUAGE_KEY, userLanguage);
       updateHudHeaderLanguage();
     }
-  
+
     // Save the click-to-retranslate setting.
     const clickToRetranslateCheckbox = document.getElementById('click-to-translate-control');
     if (clickToRetranslateCheckbox) {
       clickToRetranslateEnabled = clickToRetranslateCheckbox.checked;
       common.settingsStore.set(CLICK_TO_RETRANSLATE_KEY, clickToRetranslateEnabled.toString());
     }
-  
+
     common.settingsStore.set(EXCLUDED_COUNTRY_CODES_KEY, JSON.stringify(Array.from(excludedCountryCodes)));
     configPanel.classList.add('hidden');
   });
 }
 
 /* ===============================
+   Helpers: topic subscription and normalization
+   =============================== */
+const CHAT_TOPICS = [
+  'chat',         // nearby / open world (you already used this)
+  'event_chat',   // group rides / races
+  'club_chat',    // club channels
+  'direct_chat',  // 1:1 messages
+  'system_chat'   // organizer/system announcements that appear as chat
+];
+
+const STATE_TOPICS = [
+  'event_state',      // entering/leaving an event pen, etc.
+  'world_state',      // world/route swaps; optional cleanups
+  'net_status',       // online/offline reconnects
+  'mute_list_changed' // reflect Sauce mutes if exposed
+];
+
+// Normalize expected shape to { firstName, lastName, countryCode, message }
+function normalizeChatData(data) {
+  // Try common fields; fall back defensively
+  const firstName = data.firstName ?? data.fname ?? data.first ?? '';
+  const lastName = data.lastName ?? data.lname ?? data.last ?? '';
+  const countryCode = data.countryCode ?? data.cc ?? data.country ?? 0;
+  const message = data.message ?? data.msg ?? data.text ?? '';
+  return { firstName, lastName, countryCode, message };
+}
+
+function subscribeSafe(topic, handler) {
+  try {
+    common.subscribe(topic, handler);
+  } catch (e) {
+    if (!missingTopicLogged.has(topic)) {
+      missingTopicLogged.add(topic);
+      console.debug(`[chat-mod] Topic "${topic}" unavailable; continuing without it.`);
+    }
+  }
+}
+
+/* ===============================
    Main app (renderer, watchers)
    =============================== */
 async function main() {
-  common.subscribe('chat', async messageData => {
-    const { firstName, lastName, countryCode, message } = messageData;
+  // Keep original nearby/open-world subscription behavior
+  subscribeSafe('chat', async messageData => {
+    const { firstName, lastName, countryCode, message } = normalizeChatData(messageData);
+
+    // Drop if muted (if we know about it)
+    if (mutedSenders.has(mutedKey(firstName, lastName))) return;
+
     try {
-      const result = await translate(message, firstName, lastName, countryCode);
+      const result = await translate(message, firstName, lastName, countryCode, 'chat');
       addMessageToChats(result);
     } catch (error) {
       console.error("Translation error:", error);
+    }
+  });
+
+  // Additional chat-like channels (non-intrusive)
+  for (const t of CHAT_TOPICS.filter(t => t !== 'chat')) {
+    subscribeSafe(t, async messageData => {
+      const { firstName, lastName, countryCode, message } = normalizeChatData(messageData);
+      if (mutedSenders.has(mutedKey(firstName, lastName))) return;
+      try {
+        const result = await translate(message, firstName, lastName, countryCode, t);
+        addMessageToChats(result);
+      } catch (err) {
+        console.error(`Translation error on ${t}:`, err);
+      }
+    });
+  }
+
+  // State topics (best-effort)
+  subscribeSafe('net_status', status => {
+    // Expect { online: boolean } or similar
+    if (typeof status?.online === 'boolean') {
+      isOnline = status.online;
+    } else if (typeof status === 'string') {
+      isOnline = (status.toLowerCase() !== 'offline');
+    }
+  });
+
+  subscribeSafe('event_state', evt => {
+    // Accept multiple shapes: { inEvent:true }, { type:'enter'|'exit' }, etc.
+    if (typeof evt?.inEvent === 'boolean') {
+      inEvent = evt.inEvent;
+    } else if (typeof evt?.type === 'string') {
+      inEvent = evt.type.toLowerCase() === 'enter';
+    }
+  });
+
+  subscribeSafe('world_state', _w => {
+    // Minimal: no UI changes to avoid intrusion.
+    // Hook available for future per-world filters if you want.
+  });
+
+  subscribeSafe('mute_list_changed', payload => {
+    // Support either an array of {firstName,lastName} or a full list replacement.
+    try {
+      if (Array.isArray(payload?.muted)) {
+        mutedSenders.clear();
+        for (const m of payload.muted) {
+          mutedSenders.add(mutedKey(m.firstName, m.lastName));
+        }
+      } else if (Array.isArray(payload)) {
+        mutedSenders.clear();
+        for (const m of payload) mutedSenders.add(mutedKey(m.firstName, m.lastName));
+      } else if (payload?.action === 'add' && payload?.user) {
+        mutedSenders.add(mutedKey(payload.user.firstName, payload.user.lastName));
+      } else if (payload?.action === 'remove' && payload?.user) {
+        mutedSenders.delete(mutedKey(payload.user.firstName, payload.user.lastName));
+      }
+    } catch (e) {
+      console.debug('[chat-mod] mute_list_changed payload not understood; ignoring.', e);
     }
   });
 }

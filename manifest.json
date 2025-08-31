@@ -4,7 +4,7 @@
     "description"     : "Translate all chat messages using ChatGPT",
     "author"          : "Ryan McCormick",
     "website_url"     : "",
-    "version"         : "0.0.1",
+    "version"         : "0.0.2",
     "content_js": [
     ],
     "content_css": [
