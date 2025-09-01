@@ -4,7 +4,7 @@
     "description"     : "Translate all chat messages using ChatGPT",
     "author"          : "Ryan McCormick",
     "website_url"     : "https://github.com/sauce-mods-sisu/omnicator",
-    "version"         : "0.0.2",
+    "version"         : "0.0.3",
     "content_js": [
     ],
     "content_css": [

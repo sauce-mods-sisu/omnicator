@@ -25,6 +25,10 @@ Documents
 
 # Changelog 
 ------------------
+## Sept 1 2025 (0.0.3)
+- Sever side translations (on my dime)
+- We will see how well this works, will shut down or ask for donations if it becomes a lot of money
+
 ## Aug 31 2025 (0.0.2)
 - Chats now come from all of the sources, including events
 - Indicator shown in chat on where it's coming from

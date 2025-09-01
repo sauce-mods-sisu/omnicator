@@ -1,7 +1,27 @@
 import * as common from '/pages/src/common.mjs';
 import { flagIcons } from './flags.js';
 
-/** Ephemeral API Key Setup **/
+/* ===============================
+   Backend config (NEW)
+   =============================== */
+const BACKEND_BASE = 'https://api.rideitbettercycling.com';
+const TRANSLATE_URL = `${BACKEND_BASE}/translate`;
+const SAUCE_MOD_ID_STORAGE_KEY = 'sauceModId';
+
+/** Generate or load a stable SauceMod client id (NEW) */
+function getOrCreateSauceModId() {
+  let id = localStorage.getItem(SAUCE_MOD_ID_STORAGE_KEY);
+  if (id) return id;
+  // 16 random bytes -> hex
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  id = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+  localStorage.setItem(SAUCE_MOD_ID_STORAGE_KEY, id);
+  return id;
+}
+const SAUCE_MOD_ID = getOrCreateSauceModId();
+
+/** Ephemeral API Key Setup (used as optional Bearer for your backend tiers) **/
 let apiKey = sessionStorage.getItem('userApiKey');
 if (!apiKey) {
   document.getElementById('api-key-modal').classList.remove('hidden');
@@ -102,14 +122,7 @@ function updateExcludedCountryPills() {
 }
 updateExcludedCountryPills();
 
-/** ChatGPT role **/
-const chatGptRole = `You are a translator that identifies the language of the provided message and translates it to ${languageTokenPlaceholder}. ` +
-  `Return the name of language, translated to ${languageTokenPlaceholder}, inside braces [...] followed by the translated message, with nothing else.`;
-
-/**
- * ChatGPT API URL
- */
-const chatGptUrl = 'https://api.openai.com/v1/chat/completions';
+/** (REMOVED) OpenAI role & URL — we now call your backend **/
 
 /* ===============================
    Dragging functionality
@@ -149,24 +162,37 @@ const mutedSenders = new Set(); // Optional mute reflection
 const missingTopicLogged = new Set();
 
 /* ===============================
-   ChatGPT Completions & Translation (Model)
+   DDoP helper (client-side fallback parser)
+   =============================== */
+// In case server returns only raw DDoP string for some reason:
+const ddopRe = /^\[LANG=([^|\]]+)\|ISO=([a-z]{2})\]\s*([\s\S]+)$/i;
+function parseDdop(content) {
+  if (typeof content !== 'string') return null;
+  const m = content.trim().match(ddopRe);
+  if (!m) return null;
+  return {
+    langName: m[1].trim(),
+    iso: m[2].toLowerCase().trim(),
+    message: m[3].trim()
+  };
+}
+
+/* ===============================
+   Backend Translation (NEW)
    =============================== */
 /**
- * Translates a message using the ChatGPT API.
- * Returns a promise that resolves to an object:
+ * Translates a message using your backend /translate.
+ * Returns:
  * {
- *   firstName,
- *   lastName,
- *   countryCode,      // padded, e.g. "840"
- *   originalMessage,
- *   translatedMessage,
- *   channel           // optional: 'chat' | 'event_chat' | 'club_chat' | 'direct_chat' | 'system_chat'
+ *   firstName, lastName, countryCode, originalMessage,
+ *   translatedMessage, channel,
+ *   ddop?: { langName, iso, raw }
  * }
  */
 async function translate(message, firstName, lastName, countryCode, channel) {
   const codeStr = String(countryCode).padStart(3, '0');
 
-  // If the country is excluded, return the original message.
+  // If the country is excluded or we're offline, return the original message.
   if (excludedCountryCodes.has(codeStr) || !isOnline) {
     return {
       firstName,
@@ -178,46 +204,85 @@ async function translate(message, firstName, lastName, countryCode, channel) {
     };
   }
 
-  const headers = {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${apiKey}`
-  };
-
   // Always reload the language from storage in case it changed.
   userLanguage = common.settingsStore.get(USER_BASE_LANGUAGE_KEY) || defaultLanguage;
-  const chatGptRoleReplacingLanguage = chatGptRole.replaceAll(languageTokenPlaceholder, userLanguage);
-  const requestBody = {
+
+  const headers = {
+    'Content-Type': 'application/json',
+    'X-Sauce-Mod-Id': SAUCE_MOD_ID,        // grants sauce_mod tier on your server
+  };
+  // Optional Bearer token to get better tiering (if you choose to use it)
+  if (apiKey && String(apiKey).trim().length > 0) {
+    headers['Authorization'] = `Bearer ${apiKey}`;
+  }
+
+  const body = {
+    text: message,
+    target_language: userLanguage,
     model: "gpt-4o-mini",
-    messages: [
-      { role: "system", content: chatGptRoleReplacingLanguage },
-      { role: "user", content: message }
-    ]
+    max_tokens: 128,
+    temperature: 0.2
   };
 
   try {
-    const response = await fetch(chatGptUrl, {
+    const resp = await fetch(TRANSLATE_URL, {
       method: 'POST',
-      headers: headers,
-      body: JSON.stringify(requestBody)
+      headers,
+      body: JSON.stringify(body)
     });
-    const data = await response.json();
-    const translatedMessage = data.choices?.[0]?.message?.content;
-    if (!translatedMessage) {
-      throw new Error("No translated message received");
+
+    // 429/503 should not throw; handle nicely
+    if (!resp.ok) {
+      let errDetail = '';
+      try {
+        const errJson = await resp.json();
+        errDetail = JSON.stringify(errJson);
+      } catch (_) {}
+      throw new Error(`HTTP ${resp.status} ${resp.statusText} ${errDetail}`);
     }
-    if (data.usage && data.usage.total_tokens) {
-      accumulatedTokens += data.usage.total_tokens;
-      accumulatedCost += data.usage.total_tokens * costPerToken;
+
+    const data = await resp.json();
+    if (!data || data.success !== true) {
+      // If envelope indicates failure, fall back
+      console.warn('Backend translate failed; falling back to original:', data?.message);
+      return {
+        firstName, lastName, countryCode: codeStr,
+        originalMessage: message, translatedMessage: message, channel
+      };
+    }
+
+    // Update token/cost HUD if available
+    const usage = data.data?.usage;
+    if (usage?.total_tokens) {
+      accumulatedTokens += usage.total_tokens;
+      accumulatedCost += usage.total_tokens * costPerToken;
       updateCostDisplay();
     }
+
+    // Prefer server-parsed DDoP message -> translation
+    const translatedMessage =
+      data.data?.translation ??
+      parseDdop(data.data?.ddop?.raw || '')?.message ??
+      message; // final fallback
+
+    const ddop = data.data?.ddop
+      ? {
+          langName: data.data.ddop.lang_name || null,
+          iso: data.data.ddop.iso || null,
+          raw: data.data.ddop.raw || null
+        }
+      : null;
+
     return {
       firstName,
       lastName,
       countryCode: codeStr,
       originalMessage: message,
       translatedMessage,
-      channel
+      channel,
+      ddop
     };
+
   } catch (error) {
     console.error('Error during translation:', error);
     // Minimal intrusion fallback: show original
