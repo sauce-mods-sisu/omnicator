@@ -2,13 +2,13 @@ import * as common from '/pages/src/common.mjs';
 import { flagIcons } from './flags.js';
 
 /* ===============================
-   Backend config (NEW)
+   Backend config (NO CLIENT SECRETS — EVER)
    =============================== */
 const BACKEND_BASE = 'https://api.rideitbettercycling.com';
 const TRANSLATE_URL = `${BACKEND_BASE}/translate`;
 const SAUCE_MOD_ID_STORAGE_KEY = 'sauceModId';
 
-/** Generate or load a stable SauceMod client id (NEW) */
+/** Generate or load a stable SauceMod client id */
 function getOrCreateSauceModId() {
   let id = localStorage.getItem(SAUCE_MOD_ID_STORAGE_KEY);
   if (id) return id;
@@ -21,20 +21,20 @@ function getOrCreateSauceModId() {
 }
 const SAUCE_MOD_ID = getOrCreateSauceModId();
 
-/** Ephemeral API Key Setup (used as optional Bearer for your backend tiers) **/
-let apiKey = sessionStorage.getItem('userApiKey');
-if (!apiKey) {
-  document.getElementById('api-key-modal').classList.remove('hidden');
+/* =========================================================
+   SECURITY HARDENING: fetch wrapper that strips disallowed
+   headers no matter what. We NEVER send API keys or bearer.
+   ========================================================= */
+async function safeFetch(url, options = {}) {
+  const headers = new Headers(options.headers || {});
+  // strip any accidental/3rd-party additions:
+  headers.delete('authorization');
+  headers.delete('Authorization');
+  headers.delete('x-api-key');
+  headers.delete('X-API-Key');
+  options.headers = headers;
+  return fetch(url, options);
 }
-const saveApiKeyBtn = document.getElementById('save-api-key-btn');
-saveApiKeyBtn.addEventListener('click', () => {
-  const keyInput = document.getElementById('api-key-input');
-  if (keyInput.value) {
-    apiKey = keyInput.value;
-    sessionStorage.setItem('userApiKey', apiKey);
-    document.getElementById('api-key-modal').classList.add('hidden');
-  }
-});
 
 /** DOM references **/
 const chatWindow = document.getElementById('chats-output');
@@ -44,6 +44,8 @@ const closeConfigBtn = document.getElementById('close-config-btn');
 const saveConfigBtn = document.getElementById('save-config-btn');
 const configForm = document.getElementById('config-form'); // form inside config panel
 const languageSelect = document.getElementById('language-select');
+
+const chatMessages = document.getElementById('chat-messages'); // container for delegation
 
 // New DOM references for the excluded countries dropdown and pills container.
 const excludedSelect = document.getElementById('excluded-country-codes-input');
@@ -77,11 +79,13 @@ if (clickToRetranslateEnabled === null || clickToRetranslateEnabled === undefine
 }
 
 // Populate the dropdown for excluded countries using flagIcons data.
-for (const [code, data] of Object.entries(flagIcons)) {
-  const option = document.createElement('option');
-  option.value = code; // Keys are strings like "840"
-  option.textContent = data.name; // Display country name
-  excludedSelect.appendChild(option);
+if (excludedSelect) {
+  for (const [code, data] of Object.entries(flagIcons)) {
+    const option = document.createElement('option');
+    option.value = code; // Keys are strings like "840"
+    option.textContent = data.name; // Display country name
+    excludedSelect.appendChild(option);
+  }
 }
 
 // Excluded country codes set (default to exclude US ("840") if not set)
@@ -90,8 +94,7 @@ let excludedCountryCodes = new Set();
   const storedExcluded = common.settingsStore.get(EXCLUDED_COUNTRY_CODES_KEY);
   if (storedExcluded) {
     try {
-      // Expecting a JSON array of strings, e.g. ["840", "826"]
-      excludedCountryCodes = new Set(JSON.parse(storedExcluded));
+      excludedCountryCodes = new Set(JSON.parse(storedExcluded)); // e.g. ["840","826"]
     } catch (err) {
       console.error('Error parsing excluded country codes, using default', err);
       excludedCountryCodes = new Set(["840"]);
@@ -103,6 +106,7 @@ let excludedCountryCodes = new Set();
 
 // Function to update the pills display for excluded countries.
 function updateExcludedCountryPills() {
+  if (!excludedPillsContainer) return;
   excludedPillsContainer.innerHTML = '';
   excludedCountryCodes.forEach(code => {
     const pill = document.createElement('span');
@@ -122,8 +126,6 @@ function updateExcludedCountryPills() {
 }
 updateExcludedCountryPills();
 
-/** (REMOVED) OpenAI role & URL — we now call your backend **/
-
 /* ===============================
    Dragging functionality
    =============================== */
@@ -132,7 +134,7 @@ let offsetX = 0;
 let offsetY = 0;
 
 document.addEventListener('mousemove', (e) => {
-  if (isDragging) {
+  if (isDragging && chatWindow) {
     chatWindow.style.left = (e.clientX - offsetX) + 'px';
     chatWindow.style.top = (e.clientY - offsetY) + 'px';
   }
@@ -146,8 +148,8 @@ const tokenCountEl = document.getElementById('token-count');
 const estimatedCostEl = document.getElementById('estimated-cost');
 
 function updateCostDisplay() {
-  tokenCountEl.textContent = `Tokens Used: ${accumulatedTokens}`;
-  estimatedCostEl.textContent = `Estimated Cost: $${accumulatedCost.toFixed(4)}`;
+  if (tokenCountEl) tokenCountEl.textContent = `Tokens Used: ${accumulatedTokens}`;
+  if (estimatedCostEl) estimatedCostEl.textContent = `Estimated Cost: $${accumulatedCost.toFixed(4)}`;
 }
 
 /* ===============================
@@ -178,17 +180,8 @@ function parseDdop(content) {
 }
 
 /* ===============================
-   Backend Translation (NEW)
+   Backend Translation (NO Authorization, NO API Key, NO HMAC)
    =============================== */
-/**
- * Translates a message using your backend /translate.
- * Returns:
- * {
- *   firstName, lastName, countryCode, originalMessage,
- *   translatedMessage, channel,
- *   ddop?: { langName, iso, raw }
- * }
- */
 async function translate(message, firstName, lastName, countryCode, channel) {
   const codeStr = String(countryCode).padStart(3, '0');
 
@@ -207,14 +200,11 @@ async function translate(message, firstName, lastName, countryCode, channel) {
   // Always reload the language from storage in case it changed.
   userLanguage = common.settingsStore.get(USER_BASE_LANGUAGE_KEY) || defaultLanguage;
 
-  const headers = {
+  // Whitelisted headers only
+  const headers = new Headers({
     'Content-Type': 'application/json',
-    'X-Sauce-Mod-Id': SAUCE_MOD_ID,        // grants sauce_mod tier on your server
-  };
-  // Optional Bearer token to get better tiering (if you choose to use it)
-  if (apiKey && String(apiKey).trim().length > 0) {
-    headers['Authorization'] = `Bearer ${apiKey}`;
-  }
+    'X-Sauce-Mod-Id': SAUCE_MOD_ID
+  });
 
   const body = {
     text: message,
@@ -225,25 +215,21 @@ async function translate(message, firstName, lastName, countryCode, channel) {
   };
 
   try {
-    const resp = await fetch(TRANSLATE_URL, {
+    const resp = await safeFetch(TRANSLATE_URL, {
       method: 'POST',
       headers,
       body: JSON.stringify(body)
     });
 
-    // 429/503 should not throw; handle nicely
     if (!resp.ok) {
       let errDetail = '';
-      try {
-        const errJson = await resp.json();
-        errDetail = JSON.stringify(errJson);
-      } catch (_) {}
+      try { errDetail = JSON.stringify(await resp.json()); } catch {}
+      console.warn('Backend error:', resp.status, resp.statusText, errDetail);
       throw new Error(`HTTP ${resp.status} ${resp.statusText} ${errDetail}`);
     }
 
     const data = await resp.json();
     if (!data || data.success !== true) {
-      // If envelope indicates failure, fall back
       console.warn('Backend translate failed; falling back to original:', data?.message);
       return {
         firstName, lastName, countryCode: codeStr,
@@ -314,26 +300,21 @@ function addMessageToChats(translationResult) {
 
   const chatContainerSpan = document.createElement('span');
 
-  // Optional small channel badge (non-intrusive; invisible if no styles)
   if (channel) {
     const ch = document.createElement('span');
     ch.className = 'message-channel';
-    // Keep it terse so it doesn't clutter; 'event' instead of 'event_chat'
     ch.textContent = `【${channel.replace('_chat', '').replace('chat', 'nearby')}】`;
     ch.style.marginRight = '0.25rem';
     ch.style.opacity = '0.75';
     chatContainerSpan.appendChild(ch);
   }
 
-  // Create a span for the message name.
   const messageName = document.createElement('span');
   messageName.className = "message-name";
   messageName.textContent = `${firstName} ${lastName}`;
 
-  // Create a text node for the colon separator.
   const colonText = document.createTextNode(': ');
 
-  // Create a span for the message text.
   const messageText = document.createElement('span');
   messageText.className = "message-text";
   messageText.textContent = translatedMessage;
@@ -351,27 +332,30 @@ function addMessageToChats(translationResult) {
   chatContainerSpan.appendChild(messageText);
   messageDiv.appendChild(chatContainerSpan);
 
+  // Left-click still re-translates per-message
   messageDiv.addEventListener('click', () => {
     reTranslateMessage(messageDiv);
   });
 
-  const chatMessages = document.getElementById('chat-messages');
-  chatMessages.insertBefore(messageDiv, chatMessages.firstChild);
+  // Insert newest on top
+  if (chatMessages) {
+    chatMessages.insertBefore(messageDiv, chatMessages.firstChild);
 
-  setTimeout(() => {
-    if (messageDiv.parentElement === chatMessages) {
-      chatMessages.removeChild(messageDiv);
+    setTimeout(() => {
+      if (messageDiv.parentElement === chatMessages) {
+        chatMessages.removeChild(messageDiv);
+      }
+    }, messageTimeout * 1000);
+
+    // Enforce the configured message limit.
+    while (chatMessages.childNodes.length > messageLimit) {
+      chatMessages.removeChild(chatMessages.lastChild);
     }
-  }, messageTimeout * 1000);
-
-  // Enforce the configured message limit.
-  while (chatMessages.childNodes.length > messageLimit) {
-    chatMessages.removeChild(chatMessages.lastChild);
   }
 }
 
 /* ===============================
-   Re-translation on Message Click
+   Re-translation
    =============================== */
 function reTranslateMessage(messageDiv) {
   if (!clickToRetranslateEnabled) return;
@@ -381,7 +365,6 @@ function reTranslateMessage(messageDiv) {
   const lastName = messageDiv.getAttribute('data-last-name');
   const countryCode = messageDiv.getAttribute('data-country-code');
 
-  // If the country is excluded, skip re-translation.
   if (excludedCountryCodes.has(countryCode)) {
     console.log(`Re-translation skipped for excluded country ${countryCode}`);
     return;
@@ -398,14 +381,35 @@ function reTranslateMessage(messageDiv) {
 }
 
 /* ===============================
+   Right-click re-translate (robust via delegation)
+   =============================== */
+if (chatMessages) {
+  chatMessages.addEventListener('contextmenu', (e) => {
+    const msg = e.target.closest('.message');
+    if (!msg) return;
+    e.preventDefault();
+    e.stopPropagation();
+    reTranslateMessage(msg);
+  }, true);
+
+  // Optional: middle-click also re-translate
+  chatMessages.addEventListener('auxclick', (e) => {
+    if (e.button !== 1) return;
+    const msg = e.target.closest('.message');
+    if (!msg) return;
+    e.preventDefault();
+    reTranslateMessage(msg);
+  }, true);
+}
+
+/* ===============================
    Header Update for Language Display
    =============================== */
-// Reload the language value from storage before updating the header.
 function updateHudHeaderLanguage() {
   userLanguage = common.settingsStore.get(USER_BASE_LANGUAGE_KEY) || defaultLanguage;
-  languageSelect.value = userLanguage;
+  if (languageSelect) languageSelect.value = userLanguage;
   const hudLanguageDisplay = document.getElementById('hud-language-display');
-  const selectedOption = languageSelect.options[languageSelect.selectedIndex];
+  const selectedOption = languageSelect?.options[languageSelect.selectedIndex];
   if (hudLanguageDisplay && selectedOption) {
     hudLanguageDisplay.textContent = selectedOption.textContent;
   }
@@ -415,96 +419,103 @@ function updateHudHeaderLanguage() {
    Configuration Panel Logic
    =============================== */
 function initConfigPanel() {
-  configBtn.addEventListener('click', () => {
-    configPanel.classList.remove('hidden');
+  if (configBtn) {
+    configBtn.addEventListener('click', () => {
+      if (!configPanel) return;
+      configPanel.classList.remove('hidden');
 
-    const costInput = document.getElementById('cost-per-token-input');
-    if (costInput) costInput.value = costPerToken.toFixed(8);
+      const costInput = document.getElementById('cost-per-token-input');
+      if (costInput) costInput.value = costPerToken.toFixed(8);
 
-    const timeoutInput = document.getElementById('message-timeout');
-    if (timeoutInput) timeoutInput.value = messageTimeout;
+      const timeoutInput = document.getElementById('message-timeout');
+      if (timeoutInput) timeoutInput.value = messageTimeout;
 
-    const limitInput = document.getElementById('message-limit');
-    if (limitInput) limitInput.value = messageLimit;
+      const limitInput = document.getElementById('message-limit');
+      if (limitInput) limitInput.value = messageLimit;
 
-    // Set language dropdown value from the stored userLanguage.
-    const languageSelect = document.getElementById('language-select');
-    if (languageSelect) {
-      userLanguage = common.settingsStore.get(USER_BASE_LANGUAGE_KEY) || defaultLanguage;
-      languageSelect.value = userLanguage;
-      updateHudHeaderLanguage();
-    }
+      const languageSelectEl = document.getElementById('language-select');
+      if (languageSelectEl) {
+        userLanguage = common.settingsStore.get(USER_BASE_LANGUAGE_KEY) || defaultLanguage;
+        languageSelectEl.value = userLanguage;
+        updateHudHeaderLanguage();
+      }
 
-    // Load the click-to-retranslate checkbox state.
-    const clickToRetranslateCheckbox = document.getElementById('click-to-translate-control');
-    if (clickToRetranslateCheckbox) {
-      clickToRetranslateCheckbox.checked = clickToRetranslateEnabled;
-    }
+      const clickToRetranslateCheckbox = document.getElementById('click-to-translate-control');
+      if (clickToRetranslateCheckbox) {
+        clickToRetranslateCheckbox.checked = clickToRetranslateEnabled;
+      }
 
-    updateExcludedCountryPills();
-  });
+      updateExcludedCountryPills();
+    });
+  }
 
-  closeConfigBtn.addEventListener('click', () => {
-    configPanel.classList.add('hidden');
-  });
+  if (closeConfigBtn) {
+    closeConfigBtn.addEventListener('click', () => {
+      if (configPanel) configPanel.classList.add('hidden');
+    });
+  }
 
   const addExcludedBtn = document.getElementById('add-excluded-btn');
-  addExcludedBtn.addEventListener('click', () => {
-    const selectedCode = excludedSelect.value;
-    if (!excludedCountryCodes.has(selectedCode)) {
-      excludedCountryCodes.add(selectedCode);
-      updateExcludedCountryPills();
-    }
-  });
+  if (addExcludedBtn) {
+    addExcludedBtn.addEventListener('click', () => {
+      const selectedCode = excludedSelect?.value;
+      if (selectedCode && !excludedCountryCodes.has(selectedCode)) {
+        excludedCountryCodes.add(selectedCode);
+        updateExcludedCountryPills();
+      }
+    });
+  }
 
-  saveConfigBtn.addEventListener('click', (e) => {
-    console.log("Saving options");
-    e.preventDefault();
-    const formData = new FormData(configForm);
+  if (saveConfigBtn) {
+    saveConfigBtn.addEventListener('click', (e) => {
+      console.log("Saving options");
+      e.preventDefault();
+      if (!configForm) return;
+      const formData = new FormData(configForm);
 
-    const newCost = parseFloat(formData.get('cost-per-token-input'));
-    if (!isNaN(newCost)) {
-      costPerToken = newCost;
-      common.settingsStore.set(COST_PER_TOKEN_KEY, costPerToken.toString());
-    }
+      const newCost = parseFloat(formData.get('cost-per-token-input'));
+      if (!isNaN(newCost)) {
+        costPerToken = newCost;
+        common.settingsStore.set(COST_PER_TOKEN_KEY, costPerToken.toString());
+      }
 
-    const newTimeout = parseFloat(formData.get('message-timeout'));
-    if (!isNaN(newTimeout)) {
-      messageTimeout = newTimeout;
-      common.settingsStore.set(MESSAGE_TIMEOUT_KEY, messageTimeout.toString());
-    }
+      const newTimeout = parseFloat(formData.get('message-timeout'));
+      if (!isNaN(newTimeout)) {
+        messageTimeout = newTimeout;
+        common.settingsStore.set(MESSAGE_TIMEOUT_KEY, messageTimeout.toString());
+      }
 
-    const newLimit = parseInt(formData.get('message-limit'));
-    if (!isNaN(newLimit)) {
-      messageLimit = newLimit;
-      common.settingsStore.set(MESSAGE_LIMIT_KEY, messageLimit.toString());
-    }
+      const newLimit = parseInt(formData.get('message-limit'));
+      if (!isNaN(newLimit)) {
+        messageLimit = newLimit;
+        common.settingsStore.set(MESSAGE_LIMIT_KEY, messageLimit.toString());
+      }
 
-    const newLanguage = formData.get('language-select');
-    if (newLanguage) {
-      userLanguage = newLanguage;
-      console.log(`Setting new language to ${userLanguage}`);
-      common.settingsStore.set(USER_BASE_LANGUAGE_KEY, userLanguage);
-      updateHudHeaderLanguage();
-    }
+      const newLanguage = formData.get('language-select');
+      if (newLanguage) {
+        userLanguage = newLanguage;
+        console.log(`Setting new language to ${userLanguage}`);
+        common.settingsStore.set(USER_BASE_LANGUAGE_KEY, userLanguage);
+        updateHudHeaderLanguage();
+      }
 
-    // Save the click-to-retranslate setting.
-    const clickToRetranslateCheckbox = document.getElementById('click-to-translate-control');
-    if (clickToRetranslateCheckbox) {
-      clickToRetranslateEnabled = clickToRetranslateCheckbox.checked;
-      common.settingsStore.set(CLICK_TO_RETRANSLATE_KEY, clickToRetranslateEnabled.toString());
-    }
+      const clickToRetranslateCheckbox = document.getElementById('click-to-translate-control');
+      if (clickToRetranslateCheckbox) {
+        clickToRetranslateEnabled = clickToRetranslateCheckbox.checked;
+        common.settingsStore.set(CLICK_TO_RETRANSLATE_KEY, clickToRetranslateEnabled.toString());
+      }
 
-    common.settingsStore.set(EXCLUDED_COUNTRY_CODES_KEY, JSON.stringify(Array.from(excludedCountryCodes)));
-    configPanel.classList.add('hidden');
-  });
+      common.settingsStore.set(EXCLUDED_COUNTRY_CODES_KEY, JSON.stringify(Array.from(excludedCountryCodes)));
+      if (configPanel) configPanel.classList.add('hidden');
+    });
+  }
 }
 
 /* ===============================
    Helpers: topic subscription and normalization
    =============================== */
 const CHAT_TOPICS = [
-  'chat',         // nearby / open world (you already used this)
+  'chat',         // nearby / open world
   'event_chat',   // group rides / races
   'club_chat',    // club channels
   'direct_chat',  // 1:1 messages
@@ -520,7 +531,6 @@ const STATE_TOPICS = [
 
 // Normalize expected shape to { firstName, lastName, countryCode, message }
 function normalizeChatData(data) {
-  // Try common fields; fall back defensively
   const firstName = data.firstName ?? data.fname ?? data.first ?? '';
   const lastName = data.lastName ?? data.lname ?? data.last ?? '';
   const countryCode = data.countryCode ?? data.cc ?? data.country ?? 0;
@@ -547,7 +557,6 @@ async function main() {
   subscribeSafe('chat', async messageData => {
     const { firstName, lastName, countryCode, message } = normalizeChatData(messageData);
 
-    // Drop if muted (if we know about it)
     if (mutedSenders.has(mutedKey(firstName, lastName))) return;
 
     try {
@@ -574,7 +583,6 @@ async function main() {
 
   // State topics (best-effort)
   subscribeSafe('net_status', status => {
-    // Expect { online: boolean } or similar
     if (typeof status?.online === 'boolean') {
       isOnline = status.online;
     } else if (typeof status === 'string') {
@@ -583,7 +591,6 @@ async function main() {
   });
 
   subscribeSafe('event_state', evt => {
-    // Accept multiple shapes: { inEvent:true }, { type:'enter'|'exit' }, etc.
     if (typeof evt?.inEvent === 'boolean') {
       inEvent = evt.inEvent;
     } else if (typeof evt?.type === 'string') {
@@ -591,19 +598,13 @@ async function main() {
     }
   });
 
-  subscribeSafe('world_state', _w => {
-    // Minimal: no UI changes to avoid intrusion.
-    // Hook available for future per-world filters if you want.
-  });
+  subscribeSafe('world_state', _w => {});
 
   subscribeSafe('mute_list_changed', payload => {
-    // Support either an array of {firstName,lastName} or a full list replacement.
     try {
       if (Array.isArray(payload?.muted)) {
         mutedSenders.clear();
-        for (const m of payload.muted) {
-          mutedSenders.add(mutedKey(m.firstName, m.lastName));
-        }
+        for (const m of payload.muted) mutedSenders.add(mutedKey(m.firstName, m.lastName));
       } else if (Array.isArray(payload)) {
         mutedSenders.clear();
         for (const m of payload) mutedSenders.add(mutedKey(m.firstName, m.lastName));
@@ -626,7 +627,6 @@ function init() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  // Load the stored language and update the header immediately.
   updateHudHeaderLanguage();
   init();
   main();
