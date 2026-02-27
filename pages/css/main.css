@@ -41,14 +41,12 @@ body {
   border-radius: 8px;
 }
 
-/* Container for the header and chat messages */
 #chats-output {
   border-radius: 8px;
   overflow: hidden;
   position: relative;
 }
 
-/* Fixed HUD header */
 .hud-header {
   display: flex;
   justify-content: space-between;
@@ -311,6 +309,21 @@ body {
   object-fit: contain;
 }
 
+.message-lang-tag {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: 'Orbitron', monospace;
+  color: #888;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid #444;
+  border-radius: 3px;
+  padding: 1px 5px;
+  margin-right: 8px;
+  vertical-align: middle;
+  letter-spacing: 0.5px;
+}
+
 .message-name {
   font-weight: bold;
   color: #00ff00;
@@ -383,3 +396,142 @@ body {
   opacity: 1;
   visibility: visible;
 }
+
+/* ── TTS Toggle Switch ───────────────────────── */
+.tts-section { margin-bottom: 15px; }
+
+.tts-main-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+.toggle-switch input { opacity: 0; width: 0; height: 0; }
+
+.toggle-slider {
+  position: absolute;
+  inset: 0;
+  background: #333;
+  border-radius: 22px;
+  border: 1px solid #555;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  left: 2px;
+  bottom: 2px;
+  background: #888;
+  border-radius: 50%;
+  transition: transform 0.2s, background 0.2s;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background: rgba(0, 255, 0, 0.15);
+  border-color: #00ff00;
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+  transform: translateX(18px);
+  background: #00ff00;
+}
+
+.tts-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #e0e0e0;
+}
+
+.tts-eng-tag {
+  font-weight: 400;
+  font-size: 12px;
+  color: #888;
+}
+
+.tts-status {
+  font-size: 11px;
+  color: #555;
+  margin-left: auto;
+}
+.tts-status.ready   { color: #00ff00; }
+.tts-status.loading { color: #ffaa00; }
+.tts-status.error   { color: #ff4444; }
+
+/* Options that slide open when toggle is on */
+.tts-options {
+  margin-top: 8px;
+  padding-left: 50px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tts-voice-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tts-voice-row select {
+  flex: 1;
+  padding: 4px 6px;
+  font-size: 14px;
+  border: 1px solid #333;
+  border-radius: 4px;
+  background: #2a2a2a;
+  color: #e0e0e0;
+}
+
+.tts-test-btn {
+  font-size: 12px;
+  padding: 3px 8px;
+}
+
+.tts-progress-bar {
+  height: 6px;
+  background: #333;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.tts-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: #00ff00;
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
+.tts-progress-text {
+  font-size: 11px;
+  color: #888;
+  margin-top: 2px;
+}
+
+/* Per-message TTS speak button */
+.tts-speak-btn {
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 4px;
+  margin-left: 6px;
+  flex-shrink: 0;
+  transition: color 0.15s;
+}
+
+.tts-speak-btn:hover { color: #00ff00; }
+.tts-speak-btn.speaking { color: #ffaa00; }

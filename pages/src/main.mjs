@@ -1,5 +1,6 @@
 import * as common from '/pages/src/common.mjs';
 import { flagIcons } from './flags.js';
+import * as tts from './tts.mjs';
 
 /* ===============================
    Backend config (NO CLIENT SECRETS — EVER)
@@ -57,7 +58,9 @@ const EXCLUDED_COUNTRY_CODES_KEY = 'excludedCountryCodesSetting';
 const MESSAGE_TIMEOUT_KEY = 'messageTimeout';
 const MESSAGE_LIMIT_KEY = 'messageLimit';
 const USER_BASE_LANGUAGE_KEY = 'userLanguage';
-const CLICK_TO_RETRANSLATE_KEY = 'clickToRetranslateSetting'; // new key
+const CLICK_TO_RETRANSLATE_KEY = 'clickToRetranslateSetting';
+const TTS_ENABLED_KEY = 'ttsEnabled';
+const TTS_VOICE_KEY = 'ttsVoice';
 
 /** Global tracking variables **/
 const defaultLanguage = "English";
@@ -76,6 +79,36 @@ if (clickToRetranslateEnabled === null || clickToRetranslateEnabled === undefine
   clickToRetranslateEnabled = true;
 } else {
   clickToRetranslateEnabled = clickToRetranslateEnabled === "true";
+}
+
+// TTS state
+let ttsEnabled = common.settingsStore.get(TTS_ENABLED_KEY) === 'true';
+let ttsVoice = common.settingsStore.get(TTS_VOICE_KEY) || 'Bella';
+let ttsInitializing = false;
+
+async function ensureTtsReady() {
+  if (tts.isReady() || ttsInitializing) return;
+  ttsInitializing = true;
+  const statusEl = document.getElementById('tts-status');
+  const progressContainer = document.getElementById('tts-progress-container');
+  const progressFill = document.getElementById('tts-progress-fill');
+  const progressText = document.getElementById('tts-progress-text');
+  try {
+    if (statusEl) { statusEl.textContent = 'loading...'; statusEl.className = 'tts-status loading'; }
+    if (progressContainer) progressContainer.classList.remove('hidden');
+    await tts.init((pct) => {
+      if (progressFill) progressFill.style.width = pct + '%';
+      if (progressText) progressText.textContent = pct < 100 ? `Downloading model... ${pct}%` : 'Initializing...';
+    });
+    if (statusEl) { statusEl.textContent = 'ready'; statusEl.className = 'tts-status ready'; }
+    if (progressContainer) progressContainer.classList.add('hidden');
+  } catch (e) {
+    console.error('[tts] init failed:', e);
+    if (statusEl) { statusEl.textContent = 'error'; statusEl.className = 'tts-status error'; }
+    ttsEnabled = false;
+  } finally {
+    ttsInitializing = false;
+  }
 }
 
 // Populate the dropdown for excluded countries using flagIcons data.
@@ -287,7 +320,7 @@ async function translate(message, firstName, lastName, countryCode, channel) {
    View Logic: Adding Message to Chats
    =============================== */
 function addMessageToChats(translationResult) {
-  const { firstName, lastName, countryCode, originalMessage, translatedMessage, channel } = translationResult;
+  const { firstName, lastName, countryCode, originalMessage, translatedMessage, channel, ddop } = translationResult;
 
   const messageDiv = document.createElement('div');
   messageDiv.className = "message";
@@ -327,15 +360,43 @@ function addMessageToChats(translationResult) {
     chatContainerSpan.appendChild(flagImg);
   }
 
+  if (ddop?.iso) {
+    const langTag = document.createElement('span');
+    langTag.className = 'message-lang-tag';
+    langTag.textContent = ddop.iso.toUpperCase();
+    langTag.title = ddop.langName || ddop.iso;
+    chatContainerSpan.appendChild(langTag);
+  }
+
   chatContainerSpan.appendChild(messageName);
   chatContainerSpan.appendChild(colonText);
   chatContainerSpan.appendChild(messageText);
+
+  if (ttsEnabled && tts.isReady()) {
+    const speakBtn = document.createElement('button');
+    speakBtn.className = 'tts-speak-btn';
+    speakBtn.textContent = '🔊';
+    speakBtn.title = 'Speak this message';
+    speakBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      speakBtn.classList.add('speaking');
+      tts.speak(translatedMessage, ttsVoice)
+        .finally(() => speakBtn.classList.remove('speaking'));
+    });
+    chatContainerSpan.appendChild(speakBtn);
+  }
+
   messageDiv.appendChild(chatContainerSpan);
 
   // Left-click still re-translates per-message
   messageDiv.addEventListener('click', () => {
     reTranslateMessage(messageDiv);
   });
+
+  // Auto-speak new messages when TTS is enabled
+  if (ttsEnabled && tts.isReady()) {
+    tts.speak(translatedMessage, ttsVoice).catch(e => console.debug('[tts] speak error:', e));
+  }
 
   // Insert newest on top
   if (chatMessages) {
@@ -445,6 +506,19 @@ function initConfigPanel() {
         clickToRetranslateCheckbox.checked = clickToRetranslateEnabled;
       }
 
+      const ttsCheckbox = document.getElementById('tts-enabled');
+      if (ttsCheckbox) ttsCheckbox.checked = ttsEnabled;
+      const ttsVoiceSelect = document.getElementById('tts-voice-select');
+      if (ttsVoiceSelect) ttsVoiceSelect.value = ttsVoice;
+      const ttsOpts = document.getElementById('tts-options');
+      if (ttsOpts) ttsOpts.classList.toggle('hidden', !ttsEnabled);
+      const statusEl = document.getElementById('tts-status');
+      if (statusEl) {
+        if (tts.isReady()) { statusEl.textContent = 'ready'; statusEl.className = 'tts-status ready'; }
+        else if (ttsEnabled) { statusEl.textContent = 'not loaded'; statusEl.className = 'tts-status'; }
+        else { statusEl.textContent = ''; statusEl.className = 'tts-status'; }
+      }
+
       updateExcludedCountryPills();
     });
   }
@@ -463,6 +537,26 @@ function initConfigPanel() {
         excludedCountryCodes.add(selectedCode);
         updateExcludedCountryPills();
       }
+    });
+  }
+
+  const ttsToggle = document.getElementById('tts-enabled');
+  if (ttsToggle) {
+    ttsToggle.addEventListener('change', () => {
+      const opts = document.getElementById('tts-options');
+      if (opts) opts.classList.toggle('hidden', !ttsToggle.checked);
+      if (ttsToggle.checked) ensureTtsReady();
+    });
+  }
+
+  const ttsTestBtn = document.getElementById('tts-test-btn');
+  if (ttsTestBtn) {
+    ttsTestBtn.addEventListener('click', async () => {
+      const voice = document.getElementById('tts-voice-select')?.value || 'Bella';
+      try {
+        await ensureTtsReady();
+        if (tts.isReady()) await tts.speak('Hello, this is a test of kitten T T S.', voice);
+      } catch (e) { console.error('[tts] test failed:', e); }
     });
   }
 
@@ -503,6 +597,18 @@ function initConfigPanel() {
       if (clickToRetranslateCheckbox) {
         clickToRetranslateEnabled = clickToRetranslateCheckbox.checked;
         common.settingsStore.set(CLICK_TO_RETRANSLATE_KEY, clickToRetranslateEnabled.toString());
+      }
+
+      const ttsCheckbox = document.getElementById('tts-enabled');
+      if (ttsCheckbox) {
+        ttsEnabled = ttsCheckbox.checked;
+        common.settingsStore.set(TTS_ENABLED_KEY, ttsEnabled.toString());
+        if (ttsEnabled) ensureTtsReady();
+      }
+      const ttsVoiceSelect = document.getElementById('tts-voice-select');
+      if (ttsVoiceSelect) {
+        ttsVoice = ttsVoiceSelect.value;
+        common.settingsStore.set(TTS_VOICE_KEY, ttsVoice);
       }
 
       common.settingsStore.set(EXCLUDED_COUNTRY_CODES_KEY, JSON.stringify(Array.from(excludedCountryCodes)));
@@ -630,4 +736,5 @@ document.addEventListener('DOMContentLoaded', () => {
   updateHudHeaderLanguage();
   init();
   main();
+  if (ttsEnabled) ensureTtsReady();
 });

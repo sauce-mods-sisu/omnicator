@@ -199,6 +199,38 @@
             </div>
           </div>
 
+          <div class="form-group tts-section">
+            <div class="tts-main-toggle">
+              <label class="toggle-switch">
+                <input id="tts-enabled" name="tts-enabled" type="checkbox">
+                <span class="toggle-slider"></span>
+              </label>
+              <span class="tts-label">TTS <span class="tts-eng-tag">(English Only)</span></span>
+              <span id="tts-status" class="tts-status"></span>
+            </div>
+            <div id="tts-options" class="tts-options hidden">
+              <div class="tts-voice-row">
+                <select id="tts-voice-select" name="tts-voice-select">
+                  <option value="Bella">Bella (F)</option>
+                  <option value="Jasper">Jasper (M)</option>
+                  <option value="Luna">Luna (F)</option>
+                  <option value="Bruno">Bruno (M)</option>
+                  <option value="Rosie">Rosie (F)</option>
+                  <option value="Hugo">Hugo (M)</option>
+                  <option value="Kiki">Kiki (F)</option>
+                  <option value="Leo">Leo (M)</option>
+                </select>
+                <button type="button" class="header-btn tts-test-btn" id="tts-test-btn">Test</button>
+              </div>
+              <div id="tts-progress-container" class="hidden">
+                <div class="tts-progress-bar">
+                  <div id="tts-progress-fill" class="tts-progress-fill"></div>
+                </div>
+                <span id="tts-progress-text" class="tts-progress-text">Downloading model...</span>
+              </div>
+            </div>
+          </div>
+
 
           <div class="form-group">
             <label for="excluded-country-codes-input">
