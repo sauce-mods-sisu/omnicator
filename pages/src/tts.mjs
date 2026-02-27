@@ -7,7 +7,10 @@
  *
  * Public API:
  *   init()                 – preload model + voices (call once at startup)
- *   speak(text, voice)     – synthesize and play; returns a Promise
+ *   speak(text, voice)     – synthesize and play immediately; returns a Promise
+ *   enqueue(text, voice)   – add to playback queue; non-blocking
+ *   clearQueue()           – stop current playback and drain the queue
+ *   getQueueDepth()        – number of messages waiting in the queue
  *   stop()                 – abort current playback
  *   isReady()              – true after init() resolves
  *   getLoadProgress()      – 0-100 during model download
@@ -17,6 +20,13 @@
 const MODEL_URL =
   'https://huggingface.co/KittenML/kitten-tts-mini-0.8/resolve/main/kitten_tts_mini_v0_8.onnx';
 const ORT_CDN = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist';
+
+// SRI hash for ort.min.js at the version pinned above.
+// ⚠️  When bumping ORT_CDN to a new version, recompute with:
+//   $url = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@<NEW_VER>/dist/ort.min.js'
+//   $bytes = (Invoke-WebRequest $url -OutFile "$env:TEMP\ort.min.js" -UseBasicParsing; [IO.File]::ReadAllBytes("$env:TEMP\ort.min.js"))
+//   "sha384-" + [Convert]::ToBase64String(([Security.Cryptography.SHA384]::Create()).ComputeHash($bytes))
+const ORT_SRI = 'sha384-viYmIzsXdPb1ErOTdWrs+j0B4FjltSSGeHvt08cedBpoO5xvp3qMRSo05NZTuuzh';
 const SAMPLE_RATE = 24000;
 const DB_NAME = 'OmnicatorTTSCache';
 const DB_VERSION = 1;
@@ -43,8 +53,42 @@ let currentSource = null; // for stop()
 let loadProgress = 0;
 let _ready = false;
 
+/* ── speak queue ─────────────────────────────────── */
+const MAX_QUEUE_DEPTH = 10;
+const _queue = [];
+let _queueRunning = false;
+
 export function isReady() { return _ready; }
 export function getLoadProgress() { return loadProgress; }
+export function getQueueDepth() { return _queue.length; }
+
+/**
+ * Add a message to the sequential playback queue.
+ * If the queue is full the oldest pending item is dropped to stay current.
+ * Returns immediately — does not block the caller.
+ */
+export function enqueue(text, voice = 'Bella', speed = 1.0) {
+  if (_queue.length >= MAX_QUEUE_DEPTH) _queue.shift();
+  _queue.push({ text, voice, speed });
+  if (!_queueRunning) _drainQueue();
+}
+
+async function _drainQueue() {
+  if (_queue.length === 0) { _queueRunning = false; return; }
+  _queueRunning = true;
+  const { text, voice, speed } = _queue.shift();
+  try { await speak(text, voice, speed); } catch (e) { console.debug('[tts] queue speak error:', e); }
+  _drainQueue();
+}
+
+/**
+ * Stop current playback and discard all queued messages.
+ */
+export function clearQueue() {
+  _queue.length = 0;
+  stop();
+  _queueRunning = false;
+}
 
 /* ── IndexedDB cache ────────────────────────────── */
 function openDB() {
@@ -192,6 +236,9 @@ async function phonemizeAndTokenize(text) {
   return ids;
 }
 
+/** Yield to the browser event loop so it can paint/handle input between heavy WASM ops. */
+const _yield = () => new Promise(r => setTimeout(r, 0));
+
 /* ── public API ─────────────────────────────────── */
 
 /**
@@ -209,6 +256,8 @@ export async function init(onProgress) {
       await new Promise((resolve, reject) => {
         const script = document.createElement('script');
         script.src = `${ORT_CDN}/ort.min.js`;
+        script.integrity = ORT_SRI;
+        script.crossOrigin = 'anonymous';
         script.onload = resolve;
         script.onerror = () => reject(new Error(`Failed to load ort.min.js from ${ORT_CDN}`));
         document.head.appendChild(script);
@@ -216,6 +265,7 @@ export async function init(onProgress) {
       ort = window.ort;
     }
     ort.env.wasm.wasmPaths = `${ORT_CDN}/`;
+    ort.env.wasm.proxy = true; // run inference in a Web Worker; keeps main thread responsive
   }
   console.log('[tts] step 1/5 – onnxruntime-web loaded ✓');
 
@@ -272,7 +322,9 @@ export async function speak(text, voice = 'Bella', speed = 1.0) {
   const audioParts = [];
 
   for (const chunk of chunks) {
+    await _yield(); // let the browser paint between chunks
     const tokens = await phonemizeAndTokenize(chunk);
+    await _yield(); // yield again before ONNX inference
     const inputIds = new ort.Tensor('int64', BigInt64Array.from(tokens.map(BigInt)), [1, tokens.length]);
 
     const refIdx = Math.min(chunk.length, vdata.length - 1);

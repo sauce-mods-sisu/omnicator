@@ -19,12 +19,32 @@ Documents
 ------------------
 ### Basic Features
 - Translates all Zwift messages to a language of your choosing
+- TTS for English translations
 
 ### Demos
 - Alpha: https://www.youtube.com/watch?v=976Q1auXvYc
 
 # Changelog 
 ------------------
+## Feb 27 2026 (0.1.0)
+- Modified README to eliminate information or requirement for OpenAI key
+- There aren't too many users and so I'm happy to throw a $10 budget/month on translations (we aren't getting close)
+- Enabled TTS for English translations using [KittenTTS](https://github.com/KittenML/KittenTTS) which runs locally  (~80MB)
+   - You don't have to enable and you won't incur use of your compute or storage
+   - Stores to IndexDB the model/weights
+   - Pins voices to chat users so that you can identify who is speaking and who is responding
+      - You can clear pins in settings
+      - Pins are localStorage, will store up to 10,000 with an LRU, about 270KB
+- Security Review
+  - Found and fixed 3 Medium Severity issues
+    - Prompt Injection vector
+    - Hash check on import of script
+    - Removed the previous feature of bringing your own OpenAI key 
+- Security Posture and Exfiltration
+  - To be able to hide my own API key I wired Omnicator into my own servers (last update 0.0.3)
+  - My servers will see all of your chat.  I don't store it, but there is nothing stopping me technically
+    - This is a deeply honest admission so you know the full blast radius of using this.  I promise it's significantly better posturing than most software out there and that I take data stewardship seriously
+
 ## Sept 1 2025 (0.0.3)
 - Sever side translations (on my dime)
 - We will see how well this works, will shut down or ask for donations if it becomes a lot of money
@@ -75,72 +95,13 @@ Documents
 - Alpha is born
 
 
-# How to Acquire an OpenAI API Key
-
-This guide explains how to obtain and securely store an OpenAI API key for use in your application. Follow the steps below to get your key and keep it safe.
-Neither myself, nor anyone associated with Sauce LLC shall be liable for the costs incurred, including in the event of misplaced or stolen credentials.  
-Set very narrow budgets on your API key and use the warning/monitoring features available to you.  A few dollars should last months, if not years, so please please please
-set a tight budget around your API key.
-
----
-
-## 1. Create an OpenAI Account
-
-- **Sign Up:**  
-  Visit the [OpenAI website](https://openai.com) and sign up for an account if you don’t have one already.
-  
-- **Verify Your Account:**  
-  Complete any necessary verification steps, such as confirming your email address.
-
----
-
-## 2. Navigate to the API Keys Section
-
-- **Access Your Dashboard:**  
-  Once logged in, go to your [API keys page](https://platform.openai.com/account/api-keys) from your account dashboard.
-
-- **View Existing Keys:**  
-  Here, you can see any API keys you’ve already generated. If you’re new, this list will be empty.
-
----
-
-## 3. Generate a New API Key
-
-- **Create a New Key:**  
-  Click on the **“Create new secret key”** button. A new API key will be generated immediately.
-
-- **Copy the Key:**  
-  Make sure to copy the key immediately because for security reasons, it may not be viewable again. Store it in a secure location (e.g., a password manager).
-
----
-
-## 4. Limiting API Usage to a Budget
-
-- **Set a Spending Cap:**  
-  Log into your OpenAI account and navigate to your billing or usage settings. If available, configure a spending limit to automatically stop API usage once you reach your set threshold (e.g., $5).
-
-- **Monitor Regularly:**  
-  If a spending cap isn’t directly available, consider setting up usage alerts or employing third-party monitoring tools to keep track of your API consumption.
-
-- **Budget Management:**
-  Keeping your usage under a strict budget can prevent large unexpected bills and help maintain cost control during development or testing.
----
-
-
 ## FAQ
 ==================================================
-### 1. Why must I enter my API Key every session?
-There is no really good way for a client-only application to store secrets (passwords, other sensitive data) without a backend and some type of authentication paradigm.
-Session storage relegates your key to only being used for that time.  I am sorry if it is a pain.  I am toying with the idea of making a proxy service such that I can expose a budgeted API key for all folks to use and gauge the usage.  It's $0.60 per million tokens, I don't mind spending $10-$20/month but would be grumpy if it starts costing me $$$/month.
-
-### 2. What is the cost?
-I am currently using model `chatgpt-4o-mini` to perform translation which charges $0.60 per 1 million tokens used.  While I accurately track the number of tokens used, you will have to configure the cost per token in the Config panel.  While I will not be held liable for overages or charges, it has been incredibly cheap.  It depends on how chatty Zwfit is, but even under all day use in an event it's rare to see more than 100,000 tokens used.  Be sure to assign budgets to your API Key in the [API keys page](https://platform.openai.com/account/api-keys) 
-
-### 3. I don't see my language, can it be added?
+### 1. I don't see my language, can it be added?
 Most likely it can easily be added, leave me a message on Discord or in the Github repo
 
-### 4. These translations are awful!
+### 2. These translations are awful!
 I am sorry!
 
-### 5. My Language isn't shown!
+### 3. My Language isn't shown!
 Leave me a message in the Repo, on Zwift, on my YouTube and I'll add it.  One of the things I'm most proud of is this implementation makes it extremely trivial to add a new language.

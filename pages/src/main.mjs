@@ -60,11 +60,39 @@ const MESSAGE_LIMIT_KEY = 'messageLimit';
 const USER_BASE_LANGUAGE_KEY = 'userLanguage';
 const CLICK_TO_RETRANSLATE_KEY = 'clickToRetranslateSetting';
 const TTS_ENABLED_KEY = 'ttsEnabled';
-const TTS_VOICE_KEY = 'ttsVoice';
+const TTS_TEST_VOICE_KEY = 'ttsTestVoice';
+const TTS_SPEED_KEY = 'ttsSpeed';
+const VOICE_PINS_KEY = 'ttsVoicePins';
+const VOICE_ROTATION_KEY = 'ttsVoiceRotationIdx';
 
 /** Global tracking variables **/
 const defaultLanguage = "English";
 const languageTokenPlaceholder = "{USER_LANGUAGE_OF_CHOICE}";
+
+/**
+ * Allowed language values — sourced at runtime directly from the <select> so
+ * this set can never drift out of sync with the HTML options list.
+ * Populated in init() once the DOM is ready; guarded with a fallback set for
+ * the rare case the element is missing.
+ */
+let ALLOWED_LANGUAGES = new Set([defaultLanguage]);
+
+function buildAllowedLanguages() {
+  const sel = document.getElementById('language-select');
+  if (!sel) return;
+  ALLOWED_LANGUAGES = new Set(Array.from(sel.options).map(o => o.value).filter(Boolean));
+}
+
+/**
+ * Validate a language string against the known-good option list.
+ * Any value not in the whitelist (e.g. a prompt-injected localStorage value)
+ * is silently replaced with the default language before it reaches the backend.
+ */
+function sanitizeLanguage(lang) {
+  if (ALLOWED_LANGUAGES.has(lang)) return lang;
+  console.warn(`[omnicator] Rejecting unsanctioned language value: "${lang}", falling back to "${defaultLanguage}"`);
+  return defaultLanguage;
+}
 
 let accumulatedTokens = 0;
 let accumulatedCost = 0;
@@ -83,8 +111,46 @@ if (clickToRetranslateEnabled === null || clickToRetranslateEnabled === undefine
 
 // TTS state
 let ttsEnabled = common.settingsStore.get(TTS_ENABLED_KEY) === 'true';
-let ttsVoice = common.settingsStore.get(TTS_VOICE_KEY) || 'Bella';
+let ttsTestVoice = common.settingsStore.get(TTS_TEST_VOICE_KEY) || 'Bella';
+let ttsSpeed = parseFloat(common.settingsStore.get(TTS_SPEED_KEY)) || 1.2;
 let ttsInitializing = false;
+
+// Voice pinning — persists per-speaker assignments across sessions
+const VOICE_LIST = Object.keys(tts.VOICES); // ['Bella','Jasper','Luna','Bruno','Rosie','Hugo','Kiki','Leo']
+let voicePins = {};
+try { voicePins = JSON.parse(common.settingsStore.get(VOICE_PINS_KEY) || '{}'); } catch { voicePins = {}; }
+let voiceRotationIdx = parseInt(common.settingsStore.get(VOICE_ROTATION_KEY) || '0') % VOICE_LIST.length;
+
+// Prefer the stable numeric Zwift Rider ID; fall back to name for edge cases (system messages, etc.)
+function speakerKey(riderId, firstName, lastName) {
+  if (riderId != null && riderId !== 0) return `id:${riderId}`;
+  return `${(firstName || '').trim().toLowerCase()}|${(lastName || '').trim().toLowerCase()}`;
+}
+
+const MAX_VOICE_PINS = 10_000; // ~270 KB at ~27 bytes/entry — well within localStorage limits
+
+function getOrAssignVoice(riderId, firstName, lastName) {
+  const key = speakerKey(riderId, firstName, lastName);
+  if (voicePins[key]) return voicePins[key];
+
+  // Evict the oldest entry when the cap is reached (V8 preserves insertion order on plain objects)
+  const keys = Object.keys(voicePins);
+  if (keys.length >= MAX_VOICE_PINS) delete voicePins[keys[0]];
+
+  const voice = VOICE_LIST[voiceRotationIdx % VOICE_LIST.length];
+  voiceRotationIdx = (voiceRotationIdx + 1) % VOICE_LIST.length;
+  voicePins[key] = voice;
+  common.settingsStore.set(VOICE_PINS_KEY, JSON.stringify(voicePins));
+  common.settingsStore.set(VOICE_ROTATION_KEY, String(voiceRotationIdx));
+  return voice;
+}
+
+function clearVoicePins() {
+  voicePins = {};
+  voiceRotationIdx = 0;
+  common.settingsStore.set(VOICE_PINS_KEY, '{}');
+  common.settingsStore.set(VOICE_ROTATION_KEY, '0');
+}
 
 async function ensureTtsReady() {
   if (tts.isReady() || ttsInitializing) return;
@@ -215,12 +281,13 @@ function parseDdop(content) {
 /* ===============================
    Backend Translation (NO Authorization, NO API Key, NO HMAC)
    =============================== */
-async function translate(message, firstName, lastName, countryCode, channel) {
+async function translate(message, firstName, lastName, countryCode, channel, riderId = null) {
   const codeStr = String(countryCode).padStart(3, '0');
 
   // If the country is excluded or we're offline, return the original message.
   if (excludedCountryCodes.has(codeStr) || !isOnline) {
     return {
+      riderId,
       firstName,
       lastName,
       countryCode: codeStr,
@@ -230,8 +297,8 @@ async function translate(message, firstName, lastName, countryCode, channel) {
     };
   }
 
-  // Always reload the language from storage in case it changed.
-  userLanguage = common.settingsStore.get(USER_BASE_LANGUAGE_KEY) || defaultLanguage;
+  // Always reload the language from storage in case it changed; sanitize before use.
+  userLanguage = sanitizeLanguage(common.settingsStore.get(USER_BASE_LANGUAGE_KEY) || defaultLanguage);
 
   // Whitelisted headers only
   const headers = new Headers({
@@ -243,7 +310,7 @@ async function translate(message, firstName, lastName, countryCode, channel) {
     text: message,
     target_language: userLanguage,
     model: "gpt-4o-mini",
-    max_tokens: 128,
+    max_tokens: 1024,
     temperature: 0.2
   };
 
@@ -265,7 +332,7 @@ async function translate(message, firstName, lastName, countryCode, channel) {
     if (!data || data.success !== true) {
       console.warn('Backend translate failed; falling back to original:', data?.message);
       return {
-        firstName, lastName, countryCode: codeStr,
+        riderId, firstName, lastName, countryCode: codeStr,
         originalMessage: message, translatedMessage: message, channel
       };
     }
@@ -292,7 +359,10 @@ async function translate(message, firstName, lastName, countryCode, channel) {
         }
       : null;
 
+    console.debug('[translate] ddop:', ddop, '| raw data.data:', data.data);
+
     return {
+      riderId,
       firstName,
       lastName,
       countryCode: codeStr,
@@ -306,6 +376,7 @@ async function translate(message, firstName, lastName, countryCode, channel) {
     console.error('Error during translation:', error);
     // Minimal intrusion fallback: show original
     return {
+      riderId,
       firstName,
       lastName,
       countryCode: codeStr,
@@ -320,7 +391,10 @@ async function translate(message, firstName, lastName, countryCode, channel) {
    View Logic: Adding Message to Chats
    =============================== */
 function addMessageToChats(translationResult) {
-  const { firstName, lastName, countryCode, originalMessage, translatedMessage, channel, ddop } = translationResult;
+  const { riderId, firstName, lastName, countryCode, originalMessage, translatedMessage, channel, ddop } = translationResult;
+
+  // Resolve voice for this speaker before building the DOM so the button closure captures it
+  const speakerVoice = ttsEnabled ? getOrAssignVoice(riderId, firstName, lastName) : ttsTestVoice;
 
   const messageDiv = document.createElement('div');
   messageDiv.className = "message";
@@ -330,6 +404,7 @@ function addMessageToChats(translationResult) {
   messageDiv.setAttribute('data-first-name', firstName);
   messageDiv.setAttribute('data-last-name', lastName);
   messageDiv.setAttribute('data-country-code', countryCode);
+  if (riderId != null) messageDiv.setAttribute('data-rider-id', riderId);
 
   const chatContainerSpan = document.createElement('span');
 
@@ -360,12 +435,23 @@ function addMessageToChats(translationResult) {
     chatContainerSpan.appendChild(flagImg);
   }
 
-  if (ddop?.iso) {
+  // Language source tag — shown whenever the backend identifies the source language
+  const langLabel = ddop?.langName || (ddop?.iso ? ddop.iso.toUpperCase() : null);
+  if (langLabel) {
     const langTag = document.createElement('span');
     langTag.className = 'message-lang-tag';
-    langTag.textContent = ddop.iso.toUpperCase();
-    langTag.title = ddop.langName || ddop.iso;
+    langTag.textContent = langLabel;
+    langTag.title = `Translated from ${langLabel}`;
     chatContainerSpan.appendChild(langTag);
+  }
+
+  // Voice badge — shows which voice is pinned to this speaker
+  if (ttsEnabled) {
+    const voiceTag = document.createElement('span');
+    voiceTag.className = 'message-voice-tag';
+    voiceTag.textContent = speakerVoice;
+    voiceTag.title = `Voice: ${speakerVoice}`;
+    chatContainerSpan.appendChild(voiceTag);
   }
 
   chatContainerSpan.appendChild(messageName);
@@ -376,11 +462,12 @@ function addMessageToChats(translationResult) {
     const speakBtn = document.createElement('button');
     speakBtn.className = 'tts-speak-btn';
     speakBtn.textContent = '🔊';
-    speakBtn.title = 'Speak this message';
+    speakBtn.title = `Speak as ${speakerVoice}`;
     speakBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       speakBtn.classList.add('speaking');
-      tts.speak(translatedMessage, ttsVoice)
+      tts.clearQueue();
+      tts.speak(translatedMessage, speakerVoice)
         .finally(() => speakBtn.classList.remove('speaking'));
     });
     chatContainerSpan.appendChild(speakBtn);
@@ -393,9 +480,9 @@ function addMessageToChats(translationResult) {
     reTranslateMessage(messageDiv);
   });
 
-  // Auto-speak new messages when TTS is enabled
+  // Auto-speak: enqueue so messages play in order without blocking each other
   if (ttsEnabled && tts.isReady()) {
-    tts.speak(translatedMessage, ttsVoice).catch(e => console.debug('[tts] speak error:', e));
+    tts.enqueue(translatedMessage, speakerVoice, ttsSpeed);
   }
 
   // Insert newest on top
@@ -425,13 +512,15 @@ function reTranslateMessage(messageDiv) {
   const firstName = messageDiv.getAttribute('data-first-name');
   const lastName = messageDiv.getAttribute('data-last-name');
   const countryCode = messageDiv.getAttribute('data-country-code');
+  const riderIdAttr = messageDiv.getAttribute('data-rider-id');
+  const riderId = riderIdAttr != null ? Number(riderIdAttr) : null;
 
   if (excludedCountryCodes.has(countryCode)) {
     console.log(`Re-translation skipped for excluded country ${countryCode}`);
     return;
   }
 
-  translate(originalMessage, firstName, lastName, countryCode)
+  translate(originalMessage, firstName, lastName, countryCode, undefined, riderId)
     .then(result => {
       const messageText = messageDiv.querySelector('.message-text');
       if (messageText) {
@@ -509,7 +598,11 @@ function initConfigPanel() {
       const ttsCheckbox = document.getElementById('tts-enabled');
       if (ttsCheckbox) ttsCheckbox.checked = ttsEnabled;
       const ttsVoiceSelect = document.getElementById('tts-voice-select');
-      if (ttsVoiceSelect) ttsVoiceSelect.value = ttsVoice;
+      if (ttsVoiceSelect) ttsVoiceSelect.value = ttsTestVoice;
+      const ttsSpeedSlider = document.getElementById('tts-speed');
+      const ttsSpeedDisplay = document.getElementById('tts-speed-display');
+      if (ttsSpeedSlider) ttsSpeedSlider.value = ttsSpeed;
+      if (ttsSpeedDisplay) ttsSpeedDisplay.textContent = ttsSpeed.toFixed(2);
       const ttsOpts = document.getElementById('tts-options');
       if (ttsOpts) ttsOpts.classList.toggle('hidden', !ttsEnabled);
       const statusEl = document.getElementById('tts-status');
@@ -517,6 +610,11 @@ function initConfigPanel() {
         if (tts.isReady()) { statusEl.textContent = 'ready'; statusEl.className = 'tts-status ready'; }
         else if (ttsEnabled) { statusEl.textContent = 'not loaded'; statusEl.className = 'tts-status'; }
         else { statusEl.textContent = ''; statusEl.className = 'tts-status'; }
+      }
+      const pinsCountEl = document.getElementById('voice-pins-count');
+      if (pinsCountEl) {
+        const n = Object.keys(voicePins).length;
+        pinsCountEl.textContent = n > 0 ? `${n} / ${MAX_VOICE_PINS} pinned` : 'none pinned';
       }
 
       updateExcludedCountryPills();
@@ -553,10 +651,36 @@ function initConfigPanel() {
   if (ttsTestBtn) {
     ttsTestBtn.addEventListener('click', async () => {
       const voice = document.getElementById('tts-voice-select')?.value || 'Bella';
+      const speed = parseFloat(document.getElementById('tts-speed')?.value) || ttsSpeed;
+      ttsTestBtn.disabled = true;
+      ttsTestBtn.textContent = '…';
       try {
         await ensureTtsReady();
-        if (tts.isReady()) await tts.speak('Hello, this is a test of kitten T T S.', voice);
-      } catch (e) { console.error('[tts] test failed:', e); }
+        if (tts.isReady()) await tts.speak('Hello, this is a test of kitten T T S.', voice, speed);
+      } catch (e) {
+        console.error('[tts] test failed:', e);
+      } finally {
+        ttsTestBtn.disabled = false;
+        ttsTestBtn.textContent = 'Test';
+      }
+    });
+  }
+
+  const ttsSpeedSlider = document.getElementById('tts-speed');
+  if (ttsSpeedSlider) {
+    ttsSpeedSlider.addEventListener('input', () => {
+      const display = document.getElementById('tts-speed-display');
+      if (display) display.textContent = parseFloat(ttsSpeedSlider.value).toFixed(2);
+    });
+  }
+
+  const clearPinsBtn = document.getElementById('clear-voice-pins-btn');
+  if (clearPinsBtn) {
+    clearPinsBtn.addEventListener('click', () => {
+      clearVoicePins();
+      tts.clearQueue();
+      const pinsCountEl = document.getElementById('voice-pins-count');
+      if (pinsCountEl) pinsCountEl.textContent = 'none pinned';
     });
   }
 
@@ -585,7 +709,7 @@ function initConfigPanel() {
         common.settingsStore.set(MESSAGE_LIMIT_KEY, messageLimit.toString());
       }
 
-      const newLanguage = formData.get('language-select');
+      const newLanguage = sanitizeLanguage(formData.get('language-select') || defaultLanguage);
       if (newLanguage) {
         userLanguage = newLanguage;
         console.log(`Setting new language to ${userLanguage}`);
@@ -607,8 +731,13 @@ function initConfigPanel() {
       }
       const ttsVoiceSelect = document.getElementById('tts-voice-select');
       if (ttsVoiceSelect) {
-        ttsVoice = ttsVoiceSelect.value;
-        common.settingsStore.set(TTS_VOICE_KEY, ttsVoice);
+        ttsTestVoice = ttsVoiceSelect.value;
+        common.settingsStore.set(TTS_TEST_VOICE_KEY, ttsTestVoice);
+      }
+      const ttsSpeedEl = document.getElementById('tts-speed');
+      if (ttsSpeedEl) {
+        ttsSpeed = parseFloat(ttsSpeedEl.value) || 1.2;
+        common.settingsStore.set(TTS_SPEED_KEY, ttsSpeed.toString());
       }
 
       common.settingsStore.set(EXCLUDED_COUNTRY_CODES_KEY, JSON.stringify(Array.from(excludedCountryCodes)));
@@ -635,13 +764,15 @@ const STATE_TOPICS = [
   'mute_list_changed' // reflect Sauce mutes if exposed
 ];
 
-// Normalize expected shape to { firstName, lastName, countryCode, message }
+// Normalize expected shape to { riderId, firstName, lastName, countryCode, message }
+// `from` is the stable numeric Zwift Rider ID emitted by the Sauce framework.
 function normalizeChatData(data) {
+  const riderId = data.from ?? data.riderId ?? data.athleteId ?? null;
   const firstName = data.firstName ?? data.fname ?? data.first ?? '';
   const lastName = data.lastName ?? data.lname ?? data.last ?? '';
   const countryCode = data.countryCode ?? data.cc ?? data.country ?? 0;
   const message = data.message ?? data.msg ?? data.text ?? '';
-  return { firstName, lastName, countryCode, message };
+  return { riderId, firstName, lastName, countryCode, message };
 }
 
 function subscribeSafe(topic, handler) {
@@ -661,12 +792,12 @@ function subscribeSafe(topic, handler) {
 async function main() {
   // Keep original nearby/open-world subscription behavior
   subscribeSafe('chat', async messageData => {
-    const { firstName, lastName, countryCode, message } = normalizeChatData(messageData);
+    const { riderId, firstName, lastName, countryCode, message } = normalizeChatData(messageData);
 
     if (mutedSenders.has(mutedKey(firstName, lastName))) return;
 
     try {
-      const result = await translate(message, firstName, lastName, countryCode, 'chat');
+      const result = await translate(message, firstName, lastName, countryCode, 'chat', riderId);
       addMessageToChats(result);
     } catch (error) {
       console.error("Translation error:", error);
@@ -676,10 +807,10 @@ async function main() {
   // Additional chat-like channels (non-intrusive)
   for (const t of CHAT_TOPICS.filter(t => t !== 'chat')) {
     subscribeSafe(t, async messageData => {
-      const { firstName, lastName, countryCode, message } = normalizeChatData(messageData);
+      const { riderId, firstName, lastName, countryCode, message } = normalizeChatData(messageData);
       if (mutedSenders.has(mutedKey(firstName, lastName))) return;
       try {
-        const result = await translate(message, firstName, lastName, countryCode, t);
+        const result = await translate(message, firstName, lastName, countryCode, t, riderId);
         addMessageToChats(result);
       } catch (err) {
         console.error(`Translation error on ${t}:`, err);
@@ -729,6 +860,7 @@ async function main() {
    Initialization
    =============================== */
 function init() {
+  buildAllowedLanguages();
   initConfigPanel();
 }
 

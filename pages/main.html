@@ -6,18 +6,6 @@
     <link rel="stylesheet" href="css/main.css" />
   </head>
   <body id="chats-output">
-    <!-- API Key Modal (hidden by default) -->
-    <div id="api-key-modal" class="hidden">
-      <div class="modal-content">
-        <h2>
-          Enter your ChatGPT API Key
-          <span class="tooltip" data-tooltip="Stores your ChatGPT for the duration of the window session only.">?</span>
-        </h2>
-        <input type="password" id="api-key-input" placeholder="API Key" />
-        <button id="save-api-key-btn" class="header-btn">Store API Key for the Session Only</button>
-      </div>
-    </div>
-
     <!-- Fixed header with configuration menu and stats -->
     <div class="hud-header">
       <div class="menu">
@@ -210,6 +198,7 @@
             </div>
             <div id="tts-options" class="tts-options hidden">
               <div class="tts-voice-row">
+                <label class="tts-sub-label">Test voice:</label>
                 <select id="tts-voice-select" name="tts-voice-select">
                   <option value="Bella">Bella (F)</option>
                   <option value="Jasper">Jasper (M)</option>
@@ -221,6 +210,16 @@
                   <option value="Leo">Leo (M)</option>
                 </select>
                 <button type="button" class="header-btn tts-test-btn" id="tts-test-btn">Test</button>
+              </div>
+              <div class="tts-speed-row">
+                <label class="tts-sub-label" for="tts-speed">Speed: <span id="tts-speed-display">1.2</span></label>
+                <input type="range" id="tts-speed" name="tts-speed"
+                       min="0.5" max="2.0" step="0.05" value="1.2"
+                       class="tts-speed-slider" />
+              </div>
+              <div class="tts-pins-row">
+                <span class="tts-sub-label">Speaker pins: <span id="voice-pins-count">none pinned</span> <span class="tooltip" data-tooltip="Each Zwift rider is automatically assigned a unique TTS voice that stays consistent across messages. Clearing pins resets all assignments so voices are redistributed from scratch.">?</span></span>
+                <button type="button" class="header-btn tts-clear-pins-btn" id="clear-voice-pins-btn">Clear Pins</button>
               </div>
               <div id="tts-progress-container" class="hidden">
                 <div class="tts-progress-bar">
